@@ -456,3 +456,50 @@ func PlayChime() {
 	// SND_MEMORY | SND_ASYNC | SND_NODEFAULT
 	pPlaySoundW.Call(uintptr(unsafe.Pointer(&chime[0])), 0, 0x4|0x1|0x2)
 }
+
+// ---- posizione delle finestre ----
+
+var (
+	pGetWindowPlacement = user32.NewProc("GetWindowPlacement")
+	pSetWindowPlacement = user32.NewProc("SetWindowPlacement")
+	pMonitorFromRect    = user32.NewProc("MonitorFromRect")
+)
+
+type winPlacement struct {
+	Length, Flags, ShowCmd uint32
+	MinX, MinY, MaxX, MaxY int32
+	L, T, R, B             int32
+}
+
+// GetPlace legge posizione e dimensioni (non massimizzate) della finestra.
+// Non invia messaggi alla finestra: si può chiamare anche dal suo giro di eventi.
+func GetPlace(hwnd uintptr) (WinPlace, bool) {
+	if hwnd == 0 {
+		return WinPlace{}, false
+	}
+	var wp winPlacement
+	wp.Length = uint32(unsafe.Sizeof(wp))
+	if r, _, _ := pGetWindowPlacement.Call(hwnd, uintptr(unsafe.Pointer(&wp))); r == 0 {
+		return WinPlace{}, false
+	}
+	p := WinPlace{X: int(wp.L), Y: int(wp.T), W: int(wp.R - wp.L), H: int(wp.B - wp.T), Max: wp.ShowCmd == 3}
+	return p, p.W > 0 && p.H > 0
+}
+
+// SetPlace riporta la finestra dove era. Se quello schermo non c'è più non fa nulla.
+// Invia messaggi alla finestra: va chiamata fuori dal suo giro di eventi.
+func SetPlace(hwnd uintptr, p WinPlace) {
+	if hwnd == 0 || p.W < 100 || p.H < 100 {
+		return
+	}
+	rc := [4]int32{int32(p.X), int32(p.Y), int32(p.X + p.W), int32(p.Y + p.H)}
+	if mon, _, _ := pMonitorFromRect.Call(uintptr(unsafe.Pointer(&rc))); mon == 0 { // MONITOR_DEFAULTTONULL
+		return
+	}
+	wp := winPlacement{ShowCmd: 1, L: rc[0], T: rc[1], R: rc[2], B: rc[3]} // SW_SHOWNORMAL
+	if p.Max {
+		wp.ShowCmd = 3
+	}
+	wp.Length = uint32(unsafe.Sizeof(wp))
+	pSetWindowPlacement.Call(hwnd, uintptr(unsafe.Pointer(&wp)))
+}

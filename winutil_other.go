@@ -18,3 +18,6 @@ func SystemDarkMode() bool                                { return false }
 func PlayChime()                                          {}
 func PickFile(owner uintptr, title, filter string) string { return "" }
 func openPath(path string)                                { exec.Command("xdg-open", path).Start() }
+
+func GetPlace(hwnd uintptr) (WinPlace, bool) { return WinPlace{}, false }
+func SetPlace(hwnd uintptr, p WinPlace)      {}

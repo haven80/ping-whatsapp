@@ -28,6 +28,10 @@ type optionsState struct {
 	keyInit    bool
 	getKey     widget.Clickable
 	back       widget.Clickable
+	winSep     widget.Clickable
+	winOne     widget.Clickable
+	chatRight  widget.Clickable
+	chatLeft   widget.Clickable
 }
 
 // applyTheme sceglie la palette in base all'impostazione e la applica a tutte le finestre.
@@ -128,6 +132,22 @@ func (m *mainWin) optionsView(gtx C) D {
 	}
 	if o.getKey.Clicked(gtx) {
 		go openPath("https://partner.klipy.com")
+	}
+	if o.winSep.Clicked(gtx) {
+		m.setSingle(false)
+		gtx.Execute(op.InvalidateCmd{})
+	}
+	if o.winOne.Clicked(gtx) {
+		m.setSingle(true)
+		gtx.Execute(op.InvalidateCmd{})
+	}
+	if o.chatRight.Clicked(gtx) {
+		u.Update(func(s *Settings) { s.ChatLeft = false })
+		gtx.Execute(op.InvalidateCmd{})
+	}
+	if o.chatLeft.Clicked(gtx) {
+		u.Update(func(s *Settings) { s.ChatLeft = true })
+		gtx.Execute(op.InvalidateCmd{})
 	}
 	if o.notify.Clicked(gtx) {
 		u.setMu.Lock()
@@ -246,7 +266,39 @@ func (m *mainWin) optionsView(gtx C) D {
 				})
 			})
 		}),
-		layout.Rigid(layout.Spacer{Height: 6}.Layout),
+		section("FINESTRE"),
+		layout.Rigid(func(gtx C) D {
+			return layout.Inset{Left: 18, Right: 18}.Layout(gtx, func(gtx C) D {
+				return rounded(gtx, p.Field, 10, 3, 3, func(gtx C) D {
+					return layout.Flex{}.Layout(gtx,
+						seg(&o.winSep, "Separate", !m.single),
+						seg(&o.winOne, "Unica", m.single),
+					)
+				})
+			})
+		}),
+		layout.Rigid(func(gtx C) D {
+			t := "Ogni chat si apre nella sua finestra, come su MSN"
+			if m.single {
+				t = "Elenco e chat affiancati in una sola finestra"
+			}
+			return layout.Inset{Left: 20, Right: 18, Top: 6}.Layout(gtx, lbl(th, 11.5, p.Faint, t).Layout)
+		}),
+		layout.Rigid(func(gtx C) D {
+			if !m.single {
+				return D{}
+			}
+			left := u.Settings().ChatLeft
+			return layout.Inset{Left: 18, Right: 18, Top: 10}.Layout(gtx, func(gtx C) D {
+				return rounded(gtx, p.Field, 10, 3, 3, func(gtx C) D {
+					return layout.Flex{}.Layout(gtx,
+						seg(&o.chatLeft, "Chat a sinistra", left),
+						seg(&o.chatRight, "Chat a destra", !left),
+					)
+				})
+			})
+		}),
+		section("FOTO"),
 		toggleRow(&o.photos, "Foto profilo nella lista", "Spento: elenco compatto stile ICQ", u.settings.ShowPhotos),
 		toggleRow(&o.chatPhotos, "Foto accanto ai messaggi", "Mostra chi scrive, come su MSN", u.settings.ChatPhotos),
 		section("AVVISI"),

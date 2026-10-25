@@ -270,13 +270,12 @@ func (cw *chatWin) mediaGrid(gtx C) D {
 	q := strings.TrimSpace(ep.search.Text())
 	key := u.settings.KlipyKey
 	if key != "" {
-		w := cw.w
-		srch.run(key, u.settings.CustomerID, kind, q, w.Invalidate)
+		srch.run(key, u.settings.CustomerID, kind, q, cw.invalidate)
 	}
 	online, onlineErr, loading := srch.snapshot()
 
 	if ep.addBtn.Clicked(gtx) {
-		owner, jid, reply := cw.hwnd, cw.jid, cw.reply
+		owner, jid, reply := cw.owner(), cw.jid, cw.reply
 		cw.reply = nil
 		go func() {
 			if isGIF {
@@ -407,7 +406,7 @@ func (cw *chatWin) mediaGrid(gtx C) D {
 						})
 					default:
 						it := online[i-1-len(local)]
-						it.LoadPreview(cw.w.Invalidate)
+						it.LoadPreview(cw.invalidate)
 						jid := cw.jid
 						cl := cw.click("ol:"+kind+it.ID, func() {
 							reply := cw.reply

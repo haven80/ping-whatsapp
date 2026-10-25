@@ -34,6 +34,55 @@ type Settings struct {
 	ChatPhotos bool     `json:"chat_photos"` // foto del mittente accanto ai messaggi
 	KlipyKey   string   `json:"klipy_key"`
 	CustomerID string   `json:"customer_id"`
+	Single     bool     `json:"single_window"` // chat e lista nella stessa finestra
+	ChatLeft   bool     `json:"chat_left"`     // finestra unica: chat a sinistra della lista
+
+	Places map[string]WinPlace `json:"places,omitempty"` // posizione delle finestre (letta solo con place/savePlace)
+}
+
+// WinPlace: posizione e dimensioni di una finestra sullo schermo, in pixel.
+type WinPlace struct {
+	X, Y, W, H int
+	Max        bool
+}
+
+func (u *UI) place(key string) (WinPlace, bool) {
+	u.setMu.Lock()
+	defer u.setMu.Unlock()
+	p, ok := u.settings.Places[key]
+	return p, ok
+}
+
+// rememberPlace salva dove si trova adesso la finestra, per riaprirla lì.
+func (u *UI) rememberPlace(key string, hwnd uintptr) {
+	p, ok := GetPlace(hwnd)
+	if !ok {
+		return
+	}
+	u.setMu.Lock()
+	if u.settings.Places == nil {
+		u.settings.Places = map[string]WinPlace{}
+	}
+	same := u.settings.Places[key] == p
+	u.settings.Places[key] = p
+	u.setMu.Unlock()
+	if !same {
+		u.saveSettings()
+	}
+}
+
+// restorePlace riporta la finestra dove l'utente l'aveva lasciata (fuori dal suo giro di eventi).
+func (u *UI) restorePlace(key string, hwnd uintptr) {
+	if p, ok := u.place(key); ok {
+		SetPlace(hwnd, p)
+	}
+}
+
+func (m *mainWin) placeKey() string {
+	if m.single {
+		return "main-single"
+	}
+	return "main"
 }
 
 type UI struct {
@@ -89,6 +138,7 @@ func (u *UI) Settings() Settings {
 	defer u.setMu.Unlock()
 	s := u.settings
 	s.Recent = append([]string(nil), s.Recent...)
+	s.Places = nil // si legge solo con place()
 	return s
 }
 
@@ -138,7 +188,10 @@ func (u *UI) isChatFocused(jid string) bool {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	c := u.chats[jid]
-	return c != nil && c.focused
+	if c != nil && c.focused {
+		return true
+	}
+	return u.main != nil && u.main.focused && u.main.embed != nil && u.main.embed.jid == jid
 }
 
 func (u *UI) anyFocused() bool {
@@ -230,6 +283,21 @@ func (u *UI) OpenChatWith(jid, name string) {
 }
 
 func (u *UI) OpenChat(jid string) {
+	if m := u.main; m != nil && u.Settings().Single {
+		u.mu.Lock()
+		if m.embed == nil || m.embed.jid != jid {
+			m.embed = newEmbeddedChat(u, m, jid)
+		}
+		focused := m.focused
+		u.mu.Unlock()
+		if focused {
+			go u.be.MarkRead(jid)
+		}
+		go ShowHWND(m.hwnd)
+		m.w.Perform(system.ActionRaise)
+		m.w.Invalidate()
+		return
+	}
 	u.mu.Lock()
 	cw := u.chats[jid]
 	u.mu.Unlock()
@@ -277,6 +345,10 @@ type mainWin struct {
 	qrOp   paint.ImageOp
 	qrSize int
 
+	embed  *chatWin // finestra unica: la chat mostrata a destra (protetta da u.mu)
+	single bool     // modalità con cui è disegnata adesso
+	placed bool
+
 	bookVer  uint64
 	toldTray bool
 	book     []Chat
@@ -293,11 +365,54 @@ func (u *UI) RunMain() {
 			u.invalidateAll()
 		}
 	}()
-	m.w.Option(app.Title("Ping"), app.Size(unit.Dp(340), unit.Dp(660)), app.MinSize(unit.Dp(280), unit.Dp(420)))
+	m.single = u.Settings().Single
+	m.w.Option(app.Title("Ping"), m.sizeOption(), app.MinSize(unit.Dp(280), unit.Dp(420)))
 	go m.run()
 }
 
+// sizeOption: dimensioni iniziali della finestra principale nella modalità attuale.
+func (m *mainWin) sizeOption() app.Option {
+	if m.single {
+		return app.Size(unit.Dp(980), unit.Dp(680))
+	}
+	return app.Size(unit.Dp(340), unit.Dp(660))
+}
+
+// setSingle passa da finestre separate a finestra unica e viceversa.
+func (m *mainWin) setSingle(on bool) {
+	if on == m.single {
+		return
+	}
+	u := m.u
+	u.rememberPlace(m.placeKey(), m.hwnd)
+	u.Update(func(s *Settings) { s.Single = on })
+	m.single = on
+	if !on {
+		u.mu.Lock()
+		m.embed = nil
+		u.mu.Unlock()
+	}
+	if _, ok := u.place(m.placeKey()); ok {
+		h := m.hwnd
+		go u.restorePlace(m.placeKey(), h)
+	} else {
+		m.w.Option(m.sizeOption())
+	}
+}
+
 func (u *UI) Quit() {
+	if m := u.main; m != nil {
+		u.rememberPlace(m.placeKey(), m.hwnd)
+	}
+	u.mu.Lock()
+	open := make([]*chatWin, 0, len(u.chats))
+	for _, cw := range u.chats {
+		open = append(open, cw)
+	}
+	u.mu.Unlock()
+	for _, cw := range open {
+		u.rememberPlace("chat:"+cw.jid, cw.hwnd)
+	}
 	u.be.SetActive(false)
 	u.be.Close()
 	RemoveTray()
@@ -313,6 +428,7 @@ func (m *mainWin) run() {
 			return
 		case *app.ClosingEvent:
 			// chiudere la finestra la nasconde nell'area di notifica
+			m.u.rememberPlace(m.placeKey(), m.hwnd)
 			if trayAvailable() {
 				e.Abort()
 				// Windows sta aspettando la nostra risposta a WM_CLOSE: nasconderla adesso, dallo
@@ -326,8 +442,13 @@ func (m *mainWin) run() {
 			}
 		case app.ConfigEvent:
 			m.u.mu.Lock()
+			was := m.focused
 			m.focused = e.Config.Focused
+			embed := m.embed
 			m.u.mu.Unlock()
+			if m.focused && !was && embed != nil {
+				go m.u.be.MarkRead(embed.jid)
+			}
 			m.u.focusChanged()
 		case app.FrameEvent:
 			gtx := app.NewContext(&ops, e)
@@ -339,7 +460,16 @@ func (m *mainWin) run() {
 			if h, ok := hwndOf(e); ok {
 				m.hwnd = h
 				dark := m.u.Pal().Dark
-				go SetDarkTitleBar(h, dark) // mai chiamate sincrone verso la finestra dal suo giro di eventi
+				first := !m.placed
+				m.placed = true
+				key := m.placeKey()
+				go func() { // mai chiamate sincrone verso la finestra dal suo giro di eventi
+					SetDarkTitleBar(h, dark)
+					if first {
+						EnableFileDrop(h, m.onDrop)
+						m.u.restorePlace(key, h)
+					}
+				}()
 			}
 		}
 	}
@@ -367,6 +497,14 @@ func (m *mainWin) layout(gtx C) D {
 	if st == StateSyncing && len(cs) == 0 {
 		return m.centerMsg(gtx, "Sincronizzazione delle chat…", true)
 	}
+	if m.single && gtx.Constraints.Max.X >= dp(gtx, 620) {
+		return m.splitView(gtx, st)
+	}
+	return m.sidebar(gtx, st)
+}
+
+// sidebar: la colonna con profilo, ricerca e chat (tutta la finestra nella modalità classica).
+func (m *mainWin) sidebar(gtx C, st ConnState) D {
 	if m.showOptions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(m.header),
@@ -474,6 +612,72 @@ func (m *mainWin) loginView(gtx C, qr string, expired bool) D {
 			}),
 		)
 	})
+}
+
+// splitView: finestra unica, lista a sinistra e chat scelta a destra.
+func (m *mainWin) splitView(gtx C, st ConnState) D {
+	p := m.pal
+	m.u.mu.Lock()
+	cw, focused := m.embed, m.focused
+	if cw != nil {
+		cw.focused = focused
+	}
+	m.u.mu.Unlock()
+	side := min(dp(gtx, 330), gtx.Constraints.Max.X*2/5)
+	list := layout.Rigid(func(gtx C) D {
+		gtx.Constraints = layout.Exact(image.Pt(side, gtx.Constraints.Max.Y))
+		return m.sidebar(gtx, st)
+	})
+	divider := layout.Rigid(func(gtx C) D {
+		r := image.Rect(0, 0, 1, gtx.Constraints.Max.Y)
+		fillRect(gtx, p.Divider, r)
+		return D{Size: r.Max}
+	})
+	chat := layout.Flexed(1, func(gtx C) D {
+		gtx.Constraints.Min = gtx.Constraints.Max
+		defer clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops).Pop()
+		if cw == nil {
+			return m.emptyChat(gtx)
+		}
+		cw.pal, cw.set = m.pal, m.u.Settings()
+		var d D
+		guardFrame("chat", func() { d = cw.layout(gtx) })
+		return D{Size: gtx.Constraints.Max, Baseline: d.Baseline}
+	})
+	if m.u.Settings().ChatLeft {
+		return layout.Flex{}.Layout(gtx, chat, divider, list)
+	}
+	return layout.Flex{}.Layout(gtx, list, divider, chat)
+}
+
+func (m *mainWin) emptyChat(gtx C) D {
+	th, p := m.th, m.pal
+	fillRect(gtx, p.Bg, image.Rectangle{Max: gtx.Constraints.Max})
+	return layout.Center.Layout(gtx, func(gtx C) D {
+		return layout.Flex{Axis: layout.Vertical, Alignment: layout.Middle}.Layout(gtx,
+			layout.Rigid(func(gtx C) D { return logo(gtx, th, p, 56) }),
+			layout.Rigid(layout.Spacer{Height: 14}.Layout),
+			layout.Rigid(bold(lbl(th, 15, p.Text, "Ping")).Layout),
+			layout.Rigid(layout.Spacer{Height: 4}.Layout),
+			layout.Rigid(lbl(th, 12.5, p.Muted, "Scegli una chat dall'elenco").Layout),
+		)
+	})
+}
+
+func (m *mainWin) embedded() *chatWin {
+	m.u.mu.Lock()
+	defer m.u.mu.Unlock()
+	return m.embed
+}
+
+// onDrop: file trascinati sulla finestra principale vanno alla chat aperta a destra.
+func (m *mainWin) onDrop(paths []string) {
+	m.u.mu.Lock()
+	cw := m.embed
+	m.u.mu.Unlock()
+	if cw != nil {
+		cw.onDrop(paths)
+	}
 }
 
 // logo: l'icona dell'app.
@@ -816,7 +1020,10 @@ func (m *mainWin) row(gtx C, cl *widget.Clickable, c Chat) D {
 			})
 		}
 		call := m2.Stop()
-		if cl.Hovered() {
+		if e := m.embedded(); m.single && e != nil && e.jid == c.JID {
+			fillRRect(gtx, p.Hover, image.Rect(dp(gtx, 4), 0, d.Size.X-dp(gtx, 4), d.Size.Y), dp(gtx, 8))
+			fillRRect(gtx, p.Accent, image.Rect(dp(gtx, 4), dp(gtx, 8), dp(gtx, 7), d.Size.Y-dp(gtx, 8)), dp(gtx, 2))
+		} else if cl.Hovered() {
 			fillRRect(gtx, p.Hover, image.Rect(dp(gtx, 4), 0, d.Size.X-dp(gtx, 4), d.Size.Y), dp(gtx, 8))
 		}
 		call.Add(gtx.Ops)

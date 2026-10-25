@@ -42,9 +42,10 @@ type chatWin struct {
 	pal     Pal
 	set     Settings // copia delle impostazioni, presa a ogni fotogramma
 	jid     string
-	w       *app.Window
+	w       *app.Window // nil quando la chat è dentro la finestra principale
 	hwnd    uintptr
 	focused bool
+	host    *mainWin // finestra unica: la finestra principale che ospita la chat
 
 	list      widget.List
 	editor    widget.Editor
@@ -106,6 +107,8 @@ func (cw *chatWin) run() {
 	var ops op.Ops
 	for {
 		switch e := cw.w.Event().(type) {
+		case *app.ClosingEvent:
+			cw.u.rememberPlace("chat:"+cw.jid, cw.hwnd) // alla prossima apertura torna qui
 		case app.DestroyEvent:
 			if e.Err != nil {
 				logHandled("chiusura finestra chat", e.Err)
@@ -131,12 +134,13 @@ func (cw *chatWin) run() {
 			guardFrame("chat", func() { cw.layout(gtx) })
 			e.Frame(gtx.Ops)
 		default:
-			if h, ok := hwndOf(e); ok {
+			if h, ok := hwndOf(e); ok && h != cw.hwnd {
 				cw.hwnd = h
 				dark := cw.u.Pal().Dark
 				go func() { // fuori dal giro di eventi della finestra, che sta aspettando noi
 					EnableFileDrop(h, cw.onDrop)
 					SetDarkTitleBar(h, dark)
+					cw.u.restorePlace("chat:"+cw.jid, h)
 				}()
 			}
 		}
@@ -168,7 +172,9 @@ func (cw *chatWin) reload() {
 	}
 	if c, ok := cw.u.be.ChatByJID(cw.jid); ok && c.Name != "" && c.Name != cw.title {
 		cw.title = c.Name
-		cw.w.Option(app.Title(c.Name))
+		if cw.w != nil {
+			cw.w.Option(app.Title(c.Name))
+		}
 	}
 	if cw.focused {
 		go cw.u.be.MarkRead(cw.jid)
@@ -248,7 +254,7 @@ func (cw *chatWin) layout(gtx C) D {
 		gtx.Execute(key.FocusCmd{Tag: &cw.editor})
 	}
 	if cw.btnAttach.Clicked(gtx) {
-		owner, jid, reply := cw.hwnd, cw.jid, cw.reply
+		owner, jid, reply := cw.owner(), cw.jid, cw.reply
 		cw.reply = nil
 		go func() {
 			path := PickFile(owner, "Invia un file",
@@ -405,7 +411,7 @@ type pendingAtt struct {
 
 // paste gestisce Ctrl+V: immagini e file diventano allegati, il testo va nel campo.
 func (cw *chatWin) paste() {
-	c, err := ReadClipboard(cw.hwnd)
+	c, err := ReadClipboard(cw.owner())
 	if err != nil {
 		cw.showNotice("Impossibile leggere gli appunti")
 		return
@@ -703,7 +709,7 @@ func (cw *chatWin) notify(s string, ok bool) {
 	cw.noticeOK = ok
 	cw.notice, cw.noticeUntil = s, time.Now().Add(5*time.Second)
 	cw.noticeMu.Unlock()
-	cw.w.Invalidate()
+	cw.invalidate()
 }
 
 // startReply prepara la risposta a un messaggio.
@@ -801,5 +807,39 @@ func (cw *chatWin) onDrop(paths []string) {
 	cw.dropMu.Lock()
 	cw.dropped = append(cw.dropped, paths...)
 	cw.dropMu.Unlock()
-	cw.w.Invalidate()
+	cw.invalidate()
+}
+
+// newEmbeddedChat crea una chat da mostrare dentro la finestra principale (modalità finestra unica).
+func newEmbeddedChat(u *UI, host *mainWin, jid string) *chatWin {
+	cw := &chatWin{u: u, jid: jid, host: host, th: host.th,
+		media: map[string]*widget.Clickable{}, actions: map[string]func(){}, sel: map[string]*widget.Selectable{},
+		hover: map[string]*widget.Clickable{}, rowTags: map[string]*rowTagT{}}
+	cw.list.Axis = layout.Vertical
+	cw.list.ScrollToEnd = true
+	cw.mention.dismissed = -1
+	cw.editor.Submit = true
+	c, _ := u.be.ChatByJID(jid)
+	cw.title = c.Name
+	if cw.title == "" {
+		cw.title = jid
+	}
+	return cw
+}
+
+// invalidate chiede di ridisegnare la finestra che mostra la chat.
+func (cw *chatWin) invalidate() {
+	if cw.host != nil {
+		cw.host.w.Invalidate()
+	} else if cw.w != nil {
+		cw.w.Invalidate()
+	}
+}
+
+// owner: la finestra di sistema a cui agganciare dialoghi e appunti.
+func (cw *chatWin) owner() uintptr {
+	if cw.host != nil {
+		return cw.host.hwnd
+	}
+	return cw.hwnd
 }

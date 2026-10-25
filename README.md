@@ -32,6 +32,13 @@ Da fine 2025 WhatsApp per Windows è un involucro della versione web: in pratica
 - **una finestra per ogni chat**, da affiancare e spostare come vuoi;
 - **un'icona nell'area di notifica**: chiudere la finestra non chiude Ping.
 
+Preferisci tutto insieme? In **Opzioni › Finestre** scegli **Unica**: lista e chat affiancate in una sola finestra, con la chat a destra o a sinistra. Ogni finestra si riapre dove l'avevi lasciata, anche su un secondo schermo.
+
+<div align="center">
+<img src="docs/screenshots/finestra-unica.png" alt="Ping in modalità finestra unica: lista a sinistra e chat a destra" width="820">
+<br><sub>Modalità finestra unica.</sub>
+</div>
+
 <div align="center">
 <img src="docs/screenshots/dark.png" alt="Ping con il tema scuro" width="820">
 <br><sub>Tema chiaro e scuro, automatico o a scelta.</sub>
