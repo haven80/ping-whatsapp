@@ -9,12 +9,12 @@
 Lista contatti compatta, una finestra per ogni conversazione, nessun browser nascosto dentro.
 
 [![Build](https://github.com/haven80/ping-whatsapp/actions/workflows/build.yml/badge.svg)](https://github.com/haven80/ping-whatsapp/actions/workflows/build.yml)
-[![Ultima versione](https://img.shields.io/github/v/release/haven80/ping-whatsapp?label=versione&color=1f9d7a)](https://github.com/haven80/ping-whatsapp/releases/latest)
+[![Ultima versione](https://img.shields.io/github/v/release/haven80/ping-whatsapp?include_prereleases&label=versione&color=1f9d7a)](https://github.com/haven80/ping-whatsapp/releases)
 ![Windows 10 e 11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?logo=windows&logoColor=white)
 ![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)
 [![Licenza GPL-3.0](https://img.shields.io/badge/licenza-GPL--3.0-blue)](LICENSE)
 
-[**Scarica**](https://github.com/haven80/ping-whatsapp/releases/latest) · [Funzioni](#funzioni) · [Come si usa](#come-si-usa) · [Privacy](#privacy-e-sicurezza) · [Compilare](#compilare-dai-sorgenti)
+[**Scarica**](https://github.com/haven80/ping-whatsapp/releases) · [Funzioni](#funzioni) · [Come si usa](#come-si-usa) · [Privacy](#privacy-e-sicurezza) · [Compilare](#compilare-dai-sorgenti)
 
 <br>
 
@@ -113,7 +113,7 @@ Ricerca di chat e contatti per nome · chat archiviate · conteggio dei non lett
 
 ## Come si usa
 
-1. **Scarica** `Ping.exe` dalla [pagina delle versioni](https://github.com/haven80/ping-whatsapp/releases/latest) (`Ping-arm64.exe` per i PC con processore ARM). Non serve installarlo.
+1. **Scarica** `Ping.exe` dalla [pagina delle versioni](https://github.com/haven80/ping-whatsapp/releases) (`Ping-arm64.exe` per i PC con processore ARM). Non serve installarlo.
 2. **Avvialo.** Windows potrebbe mostrare *"Windows ha protetto il PC"*: l'eseguibile non è firmato. Scegli *Ulteriori informazioni › Esegui comunque*.
 3. **Collega il telefono:** su WhatsApp apri *Impostazioni › Dispositivi collegati › Collega un dispositivo* e inquadra il codice QR.
 4. Dopo la sincronizzazione compare la lista delle chat. **Un clic apre la conversazione** in una finestra a sé.

@@ -64,3 +64,5 @@ jobs:
         with:
           files: dist/*.exe
           generate_release_notes: true
+          prerelease: false
+          make_latest: true
