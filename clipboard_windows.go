@@ -23,6 +23,7 @@ var (
 	pGlobalUnlock               = kernel32.NewProc("GlobalUnlock")
 	pGlobalSize                 = kernel32.NewProc("GlobalSize")
 	pDragQueryFileW             = shell32.NewProc("DragQueryFileW")
+	pRtlMoveMemory              = kernel32.NewProc("RtlMoveMemory")
 )
 
 const (
@@ -49,9 +50,12 @@ func globalBytes(h uintptr) []byte {
 	}
 	defer pGlobalUnlock.Call(h)
 	n, _, _ := pGlobalSize.Call(h)
-	src := unsafe.Slice((*byte)(unsafe.Pointer(p)), n)
+	if n == 0 {
+		return nil
+	}
+	// la copia la fa Windows: niente conversione da indirizzo numerico a puntatore Go
 	out := make([]byte, n)
-	copy(out, src)
+	pRtlMoveMemory.Call(uintptr(unsafe.Pointer(&out[0])), p, n)
 	return out
 }
 
