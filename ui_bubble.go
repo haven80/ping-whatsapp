@@ -25,6 +25,7 @@ const (
 	icMap     = ""
 	icPhone   = ""
 	icLink    = ""
+	icForward = "\uE72A"
 )
 
 // click restituisce il pulsante associato a una chiave e registra l'azione da eseguire.
@@ -281,7 +282,7 @@ func (cw *chatWin) actionButtons(gtx C, m *Message) D {
 		}
 	}), lbl(th, 13, p.Text, "🙂").Layout)
 	if cw.u.be.CanForward(m) {
-		addBtn(cw.click("fwd:"+m.ID, func() { cw.startForward(msg) }), bold(lbl(th, 14, p.Muted, "↪")).Layout)
+		addBtn(cw.click("fwd:"+m.ID, func() { cw.startForward(msg) }), icon(th, 12, p.Muted, icForward).Layout)
 	}
 	if CanEdit(m) {
 		addBtn(cw.click("edit:"+m.ID, func() { cw.startEdit(msg) }), icon(th, 12, p.Muted, "\uE70F").Layout)
@@ -496,9 +497,13 @@ func (cw *chatWin) bubble(gtx C, m *Message, first bool) D {
 
 	if m.Extra.Forwarded {
 		add(func(gtx C) D {
-			l := lbl(th, 11, p.Faint, "↪ Inoltrato")
+			l := lbl(th, 11, p.Faint, "Inoltrato")
 			l.Font.Style = font.Italic
-			return l.Layout(gtx)
+			return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+				layout.Rigid(icon(th, 10, p.Faint, icForward).Layout),
+				layout.Rigid(layout.Spacer{Width: 4}.Layout),
+				layout.Rigid(l.Layout),
+			)
 		})
 		gap(2)
 	}

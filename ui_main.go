@@ -357,6 +357,12 @@ func (m *mainWin) layout(gtx C) D {
 	case StateError:
 		return m.centerMsg(gtx, "Errore: "+errText, false)
 	}
+	// l'ingranaggio cambia la vista: va letto PRIMA di decidere cosa disegnare,
+	// altrimenti il cambio si vedrebbe solo al prossimo movimento del mouse
+	if m.btnOptions.Clicked(gtx) {
+		m.showOptions = !m.showOptions
+		gtx.Execute(op.InvalidateCmd{})
+	}
 	cs, _ := m.u.be.Snapshot()
 	if st == StateSyncing && len(cs) == 0 {
 		return m.centerMsg(gtx, "Sincronizzazione delle chat…", true)
@@ -500,9 +506,6 @@ func (m *mainWin) header(gtx C) D {
 		if u.settings.Sound {
 			PlayChime()
 		}
-	}
-	if m.btnOptions.Clicked(gtx) {
-		m.showOptions = !m.showOptions
 	}
 	meJID, meName := u.be.Me()
 	m2 := op.Record(gtx.Ops)

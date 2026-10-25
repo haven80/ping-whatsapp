@@ -137,12 +137,14 @@ func (m *mainWin) optionsView(gtx C) D {
 	}
 	if o.back.Clicked(gtx) {
 		m.showOptions = false
+		gtx.Execute(op.InvalidateCmd{}) // ridisegna subito la lista
 	}
 	confirming := time.Since(m.logoutAsk) < 4*time.Second
 	if o.logout.Clicked(gtx) {
 		if confirming {
 			m.logoutAsk = time.Time{}
 			m.showOptions = false
+			gtx.Execute(op.InvalidateCmd{})
 			u.be.Logout()
 		} else {
 			m.logoutAsk = time.Now()

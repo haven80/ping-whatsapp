@@ -63,11 +63,13 @@ func (cw *chatWin) forwardView(gtx C) D {
 	}
 	if fp.cancel.Clicked(gtx) {
 		cw.fwd = nil
+		gtx.Execute(op.InvalidateCmd{}) // torna subito alla conversazione
 		return D{}
 	}
 	if fp.send.Clicked(gtx) && len(fp.sel) > 0 {
 		msg, targets := fp.msg, append([]string(nil), fp.sel...)
 		cw.fwd = nil
+		gtx.Execute(op.InvalidateCmd{})
 		n := len(targets)
 		safeGo("inoltro", func() {
 			failed := 0
@@ -132,7 +134,11 @@ func (cw *chatWin) forwardView(gtx C) D {
 					layout.Rigid(layout.Spacer{Height: 4}.Layout),
 					layout.Rigid(func(gtx C) D {
 						t := strings.Join(strings.Fields(previewMsg(fp.msg)), " ")
-						return one(lbl(th, 12, p.Muted, "↪ "+t)).Layout(gtx)
+						return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+							layout.Rigid(icon(th, 11, p.Muted, icForward).Layout),
+							layout.Rigid(layout.Spacer{Width: 6}.Layout),
+							layout.Flexed(1, one(lbl(th, 12, p.Muted, t)).Layout),
+						)
 					}),
 				)
 			})
