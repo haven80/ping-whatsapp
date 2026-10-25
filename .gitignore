@@ -1,0 +1,12 @@
+# file generati dalla compilazione
+*.exe
+*.syso
+dist/
+
+# per sicurezza: dati personali di Ping (sessione WhatsApp, messaggi) non vanno mai nel repository
+session.db*
+ping.db*
+settings.json
+crash.log
+avatars/
+media/
