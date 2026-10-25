@@ -22,6 +22,7 @@ var (
 	dropTargets  = map[uintptr]dropTarget{}
 	dropProcOnce sync.Once
 	dropProcPtr  uintptr
+	placeWatch   = map[uintptr]func(WinPlace){}
 )
 
 type dropTarget struct {
@@ -30,9 +31,13 @@ type dropTarget struct {
 }
 
 const (
-	wmDropFiles = 0x0233
-	wmNCDestroy = 0x0082
-	gwlpWndProc = ^uintptr(3) // -4
+	wmDropFiles    = 0x0233
+	wmClose        = 0x0010
+	wmExitSizeMove = 0x0232
+	wmSize         = 0x0005
+	sizeMaximized  = 2
+	wmNCDestroy    = 0x0082
+	gwlpWndProc    = ^uintptr(3) // -4
 )
 
 // EnableFileDrop fa sì che la finestra accetti file trascinati; fn riceve i percorsi.
@@ -74,10 +79,26 @@ func EnableFileDrop(hwnd uintptr, fn func([]string)) {
 	pDragAcceptFiles.Call(hwnd, 1)
 }
 
+// WatchPlace chiama fn con posizione e dimensioni della finestra ogni volta che l'utente
+// finisce di spostarla o ridimensionarla, la ingrandisce o la chiude. Va chiamata prima di
+// EnableFileDrop. fn gira in un goroutine a parte.
+func WatchPlace(hwnd uintptr, fn func(WinPlace)) {
+	dropMu.Lock()
+	placeWatch[hwnd] = fn
+	dropMu.Unlock()
+}
+
 func dropProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 	dropMu.Lock()
 	t, ok := dropTargets[hwnd]
+	watch := placeWatch[hwnd]
 	dropMu.Unlock()
+	// posizione letta qui, sul thread della finestra: è sempre aggiornata e la finestra esiste ancora
+	if watch != nil && (msg == wmExitSizeMove || msg == wmClose || (msg == wmSize && wp == sizeMaximized)) {
+		if p, ok := GetPlace(hwnd); ok {
+			go watch(p)
+		}
+	}
 	if !ok {
 		// non dovrebbe succedere: in ogni caso il messaggio non va mai perso
 		r, _, _ := pDefWindowProcW.Call(hwnd, uintptr(msg), wp, lp)
@@ -108,6 +129,7 @@ func dropProc(hwnd uintptr, msg uint32, wp, lp uintptr) uintptr {
 	if msg == wmNCDestroy {
 		dropMu.Lock()
 		delete(dropTargets, hwnd)
+		delete(placeWatch, hwnd)
 		dropMu.Unlock()
 	}
 	return r

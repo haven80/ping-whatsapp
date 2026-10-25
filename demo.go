@@ -166,6 +166,8 @@ func fillDemo(b *Backend, u *UI) {
 		}},
 	}
 	photo, photoThumb := demoPhoto(b.dir)
+	photoData, _ := os.ReadFile(photo)
+	linkThumb := previewThumb(photoData) // anteprima link grande
 	sticker := demoSticker(b.dir)
 	gifP, animSticker, gifThumb := demoAnim(b.dir)
 	data = append(data, dm{jid: "393409876543@s.whatsapp.net", name: "Chiara Neri", online: true, unread: 3, msgs: []Message{
@@ -182,7 +184,7 @@ func fillDemo(b *Backend, u *UI) {
 		{Kind: KPoll, Time: ago(40 * time.Minute), Extra: MsgExtra{Title: "Domani dove andiamo?", Options: []string{"Mare", "Montagna", "Divano"}}},
 		{Kind: KContact, Time: ago(30 * time.Minute), Extra: MsgExtra{Title: "Luca Ferri", Options: []string{"+39 333 123 4567"}}},
 		{Text: "Leggi qui: https://www.repubblica.it/tecnologia", FromMe: true, Time: ago(20 * time.Minute), Status: StDelivered,
-			Extra: MsgExtra{URL: "https://www.repubblica.it/tecnologia", Title: "Tecnologia - la Repubblica", Desc: "Le ultime notizie su tecnologia, internet e innovazione"}},
+			Extra: MsgExtra{URL: "https://www.repubblica.it/tecnologia", Title: "Tecnologia - la Repubblica", Desc: "Le ultime notizie su tecnologia, internet e innovazione"}, Thumb: linkThumb},
 		{Kind: KCall, Text: "Chiamata vocale in arrivo", Time: ago(10 * time.Minute)},
 		{Kind: KDoc, FileName: "Biglietti_treno.pdf", Time: ago(5 * time.Minute), Extra: MsgExtra{Size: 245_000, Pages: 2, Forwarded: true}},
 		{Kind: KVideo, MediaPath: gifP, Thumb: gifThumb, Time: ago(4 * time.Minute), Extra: MsgExtra{GIF: true, W: 240, H: 160}},

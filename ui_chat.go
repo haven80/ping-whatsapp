@@ -1,6 +1,7 @@
 package main
 
 import (
+	"gioui.org/x/richtext"
 	"image"
 	"image/png"
 	"io"
@@ -45,7 +46,9 @@ type chatWin struct {
 	w       *app.Window // nil quando la chat è dentro la finestra principale
 	hwnd    uintptr
 	focused bool
-	host    *mainWin // finestra unica: la finestra principale che ospita la chat
+	host    *mainWin                             // finestra unica: la finestra principale che ospita la chat
+	rich    map[string]*richtext.InteractiveText // testi con link cliccabili
+	lp      linkDraft                            // anteprima del link mentre si scrive
 
 	list      widget.List
 	editor    widget.Editor
@@ -137,10 +140,12 @@ func (cw *chatWin) run() {
 			if h, ok := hwndOf(e); ok && h != cw.hwnd {
 				cw.hwnd = h
 				dark := cw.u.Pal().Dark
+				key := "chat:" + cw.jid
 				go func() { // fuori dal giro di eventi della finestra, che sta aspettando noi
+					WatchPlace(h, func(p WinPlace) { cw.u.storePlace(key, p) })
 					EnableFileDrop(h, cw.onDrop)
 					SetDarkTitleBar(h, dark)
-					cw.u.restorePlace("chat:"+cw.jid, h)
+					cw.u.restorePlace(key, h)
 				}()
 			}
 		}
@@ -338,6 +343,7 @@ func (cw *chatWin) layout(gtx C) D {
 		layout.Rigid(cw.emojiPanel),
 		layout.Rigid(cw.replyStrip),
 		layout.Rigid(cw.pendingStrip),
+		layout.Rigid(cw.linkStrip),
 		layout.Rigid(cw.mentionPopup),
 		layout.Rigid(cw.composer),
 	)
@@ -360,7 +366,12 @@ func (cw *chatWin) send() {
 	cw.list.Position.BeforeEnd = false // torna in fondo
 	text, reply, pending, jid, be := convertSmileys(t), cw.reply, cw.pending, cw.jid, cw.u.be
 	names := cw.mention.names
+	withPreview := cw.sendPreview(text)
 	cw.reply, cw.pending, cw.mention.names = nil, nil, nil
+	if len(pending) == 0 && withPreview != nil {
+		safeGo("invio con anteprima", func() { be.SendTextFull(jid, text, names, reply, withPreview()) })
+		return
+	}
 	if len(pending) == 0 {
 		if len(names) > 0 {
 			be.SendTextMentions(jid, text, names, reply)

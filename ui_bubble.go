@@ -1,9 +1,9 @@
 package main
 
 import (
+	"gioui.org/x/richtext"
 	"image"
 	"image/color"
-	"net/url"
 	"strings"
 	"unicode"
 
@@ -583,12 +583,16 @@ func (cw *chatWin) bubble(gtx C, m *Message, first bool) D {
 		if m.Kind == KText && emojiOnly(text) {
 			size = 32
 		}
-		add(func(gtx C) D {
-			l := lbl(th, size, p.Text, text)
-			l.State = sel
-			l.SelectionColor = argb(0x1F9D7A, 0x55)
-			return l.Layout(gtx)
-		})
+		if spans := linkSpans(text); spans != nil {
+			add(func(gtx C) D { return cw.richText(gtx, m.ID, spans, size) })
+		} else {
+			add(func(gtx C) D {
+				l := lbl(th, size, p.Text, text)
+				l.State = sel
+				l.SelectionColor = argb(0x1F9D7A, 0x55)
+				return l.Layout(gtx)
+			})
+		}
 	}
 	// anteprima del link
 	if m.Kind == KText && m.Extra.URL != "" {
@@ -1150,50 +1154,72 @@ func (cw *chatWin) event(gtx C, m *Message) D {
 func (cw *chatWin) linkCard(gtx C, m *Message) D {
 	th, p := cw.th, cw.pal
 	u := m.Extra.URL
-	host := u
-	if pu, err := url.Parse(u); err == nil && pu.Host != "" {
-		host = strings.TrimPrefix(pu.Host, "www.")
-	}
+	host := hostOf(u)
 	title := m.Extra.Title
 	gtx.Constraints.Max.X = min(gtx.Constraints.Max.X, dp(gtx, 300))
+	// immagine grande sopra il testo se la miniatura è larga e abbastanza nitida
+	var big bool
+	var tOp paint.ImageOp
+	var tSize image.Point
+	if len(m.Thumb) > 0 {
+		var ok bool
+		if tOp, tSize, ok = thumbOp(m.Chat+"/"+m.ID, m.Thumb); ok {
+			big = tSize.X >= 200 && tSize.X*10 >= tSize.Y*13
+		}
+	}
+	texts := func(gtx C) D {
+		var ch []layout.FlexChild
+		if title != "" {
+			ch = append(ch, layout.Rigid(func(gtx C) D {
+				l := bold(lbl(th, 12.5, p.Text, title))
+				l.MaxLines = 2
+				return l.Layout(gtx)
+			}))
+		}
+		if m.Extra.Desc != "" {
+			ch = append(ch, layout.Rigid(func(gtx C) D {
+				l := lbl(th, 11.5, p.Muted, m.Extra.Desc)
+				l.MaxLines = 2
+				return l.Layout(gtx)
+			}))
+		}
+		ch = append(ch, layout.Rigid(one(lbl(th, 11.5, linkColor(p), host)).Layout))
+		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, ch...)
+	}
 	return cw.click("u:"+m.ID, func() { go openPath(u) }).Layout(gtx, func(gtx C) D {
 		pointer.CursorPointer.Add(gtx.Ops)
+		if big {
+			w := gtx.Constraints.Max.X
+			h := min(w*tSize.Y/max(1, tSize.X), dp(gtx, 170))
+			mc := op.Record(gtx.Ops)
+			dd := layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+				layout.Rigid(func(gtx C) D {
+					defer clip.Rect{Max: image.Pt(w, h)}.Push(gtx.Ops).Pop()
+					drawImage(gtx, tOp, tSize, image.Pt(w, h))
+					return D{Size: image.Pt(w, h)}
+				}),
+				layout.Rigid(func(gtx C) D {
+					gtx.Constraints.Min.X = w
+					return layout.Inset{Left: 9, Right: 9, Top: 6, Bottom: 7}.Layout(gtx, texts)
+				}),
+			)
+			call := mc.Stop()
+			st := clip.UniformRRect(image.Rectangle{Max: dd.Size}, dp(gtx, 8)).Push(gtx.Ops)
+			paint.Fill(gtx.Ops, subtleBg(p))
+			call.Add(gtx.Ops)
+			st.Pop()
+			return dd
+		}
 		return rounded(gtx, subtleBg(p), 8, 9, 7, func(gtx C) D {
 			return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
 				layout.Rigid(func(gtx C) D {
 					if len(m.Thumb) == 0 {
 						return icon(th, 14, p.Accent, icLink).Layout(gtx)
 					}
-					tOp, tSize, ok := thumbOp(m.Chat+"/"+m.ID, m.Thumb)
-					if !ok {
-						return D{}
-					}
-					s := dp(gtx, 48)
-					st := clip.UniformRRect(image.Rectangle{Max: image.Pt(s, s)}, dp(gtx, 6)).Push(gtx.Ops)
-					drawImage(gtx, tOp, tSize, image.Pt(s, s))
-					st.Pop()
-					return D{Size: image.Pt(s, s)}
+					return thumbSquare(gtx, m.Chat+"/"+m.ID, m.Thumb, 48)
 				}),
 				layout.Rigid(layout.Spacer{Width: 9}.Layout),
-				layout.Flexed(1, func(gtx C) D {
-					var ch []layout.FlexChild
-					if title != "" {
-						ch = append(ch, layout.Rigid(func(gtx C) D {
-							l := bold(lbl(th, 12.5, p.Text, title))
-							l.MaxLines = 2
-							return l.Layout(gtx)
-						}))
-					}
-					if m.Extra.Desc != "" {
-						ch = append(ch, layout.Rigid(func(gtx C) D {
-							l := lbl(th, 11.5, p.Muted, m.Extra.Desc)
-							l.MaxLines = 2
-							return l.Layout(gtx)
-						}))
-					}
-					ch = append(ch, layout.Rigid(one(lbl(th, 11.5, p.Accent, host)).Layout))
-					return layout.Flex{Axis: layout.Vertical}.Layout(gtx, ch...)
-				}),
+				layout.Flexed(1, texts),
 			)
 		})
 	})
@@ -1225,4 +1251,79 @@ func (cw *chatWin) senderAvatar(gtx C, m *Message, size float32) D {
 		name = c.Name
 	}
 	return avatar(gtx, th, p, be, jid, name, size, false, false, p.Bg)
+}
+
+// textSpan: un pezzo di testo; se url non è vuoto è un link cliccabile.
+type textSpan struct{ text, url string }
+
+// linkSpans divide il testo in pezzi normali e link. nil se non contiene link.
+func linkSpans(s string) []textSpan {
+	idx := reURL.FindAllStringIndex(s, -1)
+	if len(idx) == 0 {
+		return nil
+	}
+	var out []textSpan
+	last := 0
+	for _, r := range idx {
+		start, end := r[0], r[1]
+		raw := strings.TrimRight(s[start:end], ".,;:!?)»”'")
+		end = start + len(raw)
+		if start < last {
+			continue
+		}
+		if start > last {
+			out = append(out, textSpan{text: s[last:start]})
+		}
+		u := raw
+		if !strings.HasPrefix(strings.ToLower(u), "http") {
+			u = "https://" + u
+		}
+		out = append(out, textSpan{text: raw, url: u})
+		last = end
+	}
+	if last < len(s) {
+		out = append(out, textSpan{text: s[last:]})
+	}
+	return out
+}
+
+func linkColor(p Pal) color.NRGBA {
+	if p.Dark {
+		return rgb(0x53BDEB)
+	}
+	return rgb(0x027EB5)
+}
+
+// richText disegna un testo con i link cliccabili (si aprono nel browser).
+func (cw *chatWin) richText(gtx C, id string, spans []textSpan, size float32) D {
+	if cw.rich == nil {
+		cw.rich = map[string]*richtext.InteractiveText{}
+	}
+	st := cw.rich[id]
+	if st == nil {
+		st = new(richtext.InteractiveText)
+		cw.rich[id] = st
+	}
+	for {
+		span, ev, ok := st.Update(gtx)
+		if !ok {
+			break
+		}
+		if ev.Type == richtext.Click {
+			if u, _ := span.Get("url").(string); u != "" {
+				go openPath(u)
+			}
+		}
+	}
+	p := cw.pal
+	styles := make([]richtext.SpanStyle, 0, len(spans))
+	for _, s := range spans {
+		ss := richtext.SpanStyle{Font: font.Font{Typeface: cw.th.Face}, Size: unit.Sp(size), Color: p.Text, Content: s.text}
+		if s.url != "" {
+			ss.Color, ss.Interactive = linkColor(p), true
+			ss.Set("url", s.url)
+		}
+		styles = append(styles, ss)
+	}
+	return richtext.Text(st, cw.th.Shaper, styles...).Layout(gtx)
 }

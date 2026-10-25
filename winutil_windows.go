@@ -493,7 +493,7 @@ func SetPlace(hwnd uintptr, p WinPlace) {
 		return
 	}
 	rc := [4]int32{int32(p.X), int32(p.Y), int32(p.X + p.W), int32(p.Y + p.H)}
-	if mon, _, _ := pMonitorFromRect.Call(uintptr(unsafe.Pointer(&rc))); mon == 0 { // MONITOR_DEFAULTTONULL
+	if mon, _, _ := pMonitorFromRect.Call(uintptr(unsafe.Pointer(&rc)), 0); mon == 0 { // MONITOR_DEFAULTTONULL
 		return
 	}
 	wp := winPlacement{ShowCmd: 1, L: rc[0], T: rc[1], R: rc[2], B: rc[3]} // SW_SHOWNORMAL

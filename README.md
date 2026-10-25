@@ -67,7 +67,7 @@ Preferisci tutto insieme? In **Opzioni › Finestre** scegli **Unica**: lista e 
 - **GIF animate** direttamente nella conversazione
 - Video, vocali, documenti (tipo, pagine, dimensione)
 - Posizioni con mappa, contatti, sondaggi, eventi
-- Anteprime dei link
+- **Link cliccabili** con anteprima (titolo, descrizione e immagine), anche quando li invii tu
 - Messaggi inoltrati e "visualizza una volta"
 
 </td>

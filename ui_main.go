@@ -55,10 +55,13 @@ func (u *UI) place(key string) (WinPlace, bool) {
 
 // rememberPlace salva dove si trova adesso la finestra, per riaprirla lì.
 func (u *UI) rememberPlace(key string, hwnd uintptr) {
-	p, ok := GetPlace(hwnd)
-	if !ok {
-		return
+	if p, ok := GetPlace(hwnd); ok {
+		u.storePlace(key, p)
 	}
+}
+
+// storePlace salva una posizione già letta (dal thread della finestra).
+func (u *UI) storePlace(key string, p WinPlace) {
 	u.setMu.Lock()
 	if u.settings.Places == nil {
 		u.settings.Places = map[string]WinPlace{}
@@ -76,6 +79,14 @@ func (u *UI) restorePlace(key string, hwnd uintptr) {
 	if p, ok := u.place(key); ok {
 		SetPlace(hwnd, p)
 	}
+}
+
+// placeKeyNow: come placeKey, ma sicura da chiamare da altri goroutine.
+func (m *mainWin) placeKeyNow() string {
+	if m.u.Settings().Single {
+		return "main-single"
+	}
+	return "main"
 }
 
 func (m *mainWin) placeKey() string {
@@ -466,6 +477,7 @@ func (m *mainWin) run() {
 				go func() { // mai chiamate sincrone verso la finestra dal suo giro di eventi
 					SetDarkTitleBar(h, dark)
 					if first {
+						WatchPlace(h, func(p WinPlace) { m.u.storePlace(m.placeKeyNow(), p) })
 						EnableFileDrop(h, m.onDrop)
 						m.u.restorePlace(key, h)
 					}

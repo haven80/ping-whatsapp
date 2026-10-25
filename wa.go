@@ -834,17 +834,7 @@ func (b *Backend) Typing(jid string) {
 }
 
 func (b *Backend) SendText(jid, text string, reply *Message) {
-	text = strings.TrimRight(text, " \n\r\t")
-	if strings.TrimSpace(text) == "" {
-		return
-	}
-	m := &Message{Text: text, Kind: KText}
-	b.sendPrepared(jid, m, reply, func(ci *waE2E.ContextInfo) (*waE2E.Message, error) {
-		if ci == nil {
-			return &waE2E.Message{Conversation: proto.String(text)}, nil
-		}
-		return &waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{Text: proto.String(text), ContextInfo: ci}}, nil
-	})
+	b.SendTextFull(jid, text, nil, reply, nil)
 }
 
 func (b *Backend) chatNameOr(jid string, j types.JID) string {

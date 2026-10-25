@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"image"
 	"sort"
 	"strings"
 	"sync"
@@ -167,24 +169,57 @@ func (b *Backend) renderMentions(text string, mentioned []string) string {
 
 // SendTextMentions invia un testo con menzioni: names associa "Nome" (come scritto dopo @) al JID.
 func (b *Backend) SendTextMentions(jid, text string, names map[string]string, reply *Message) {
+	b.SendTextFull(jid, text, names, reply, nil)
+}
+
+// SendTextFull invia un testo con eventuali menzioni (names: nome mostrato → JID)
+// e l'anteprima del link (prev può essere nil).
+func (b *Backend) SendTextFull(jid, text string, names map[string]string, reply *Message, prev *LinkPreview) {
 	text = strings.TrimRight(text, " \n\r\t")
 	if strings.TrimSpace(text) == "" {
 		return
 	}
 	wire, mentioned := mentionWire(text, names)
-	if len(mentioned) == 0 {
-		b.SendText(jid, text, reply)
-		return
-	}
 	m := &Message{Text: text, Kind: KText}
+	if prev != nil {
+		m.Extra.URL, m.Extra.Title, m.Extra.Desc, m.Thumb = prev.URL, prev.Title, prev.Desc, prev.Thumb
+	}
 	b.sendPrepared(jid, m, reply, func(ci *waE2E.ContextInfo) (*waE2E.Message, error) {
-		if ci == nil {
-			ci = &waE2E.ContextInfo{}
+		if ci == nil && len(mentioned) == 0 && prev == nil {
+			return &waE2E.Message{Conversation: proto.String(wire)}, nil
 		}
-		ci.MentionedJID = mentioned
-		return &waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{
-			Text: proto.String(wire), ContextInfo: ci}}, nil
+		if len(mentioned) > 0 {
+			if ci == nil {
+				ci = &waE2E.ContextInfo{}
+			}
+			ci.MentionedJID = mentioned
+		}
+		x := &waE2E.ExtendedTextMessage{Text: proto.String(wire), ContextInfo: ci}
+		if prev != nil {
+			x.MatchedText = proto.String(matchedIn(text, prev.URL))
+			x.Title = proto.String(prev.Title)
+			x.Description = proto.String(prev.Desc)
+			x.PreviewType = waE2E.ExtendedTextMessage_NONE.Enum()
+			if len(prev.Thumb) > 0 {
+				x.JPEGThumbnail = prev.Thumb
+				if cfg, _, err := image.DecodeConfig(bytes.NewReader(prev.Thumb)); err == nil {
+					x.ThumbnailWidth, x.ThumbnailHeight = proto.Uint32(uint32(cfg.Width)), proto.Uint32(uint32(cfg.Height))
+				}
+			}
+		}
+		return &waE2E.Message{ExtendedTextMessage: x}, nil
 	})
+}
+
+// matchedIn: il link così come compare nel testo (WhatsApp lo usa per agganciare l'anteprima).
+func matchedIn(text, u string) string {
+	if strings.Contains(text, u) {
+		return u
+	}
+	if s := strings.TrimPrefix(u, "https://"); strings.Contains(text, s) {
+		return s
+	}
+	return u
 }
 
 // mentionWire converte "@Nome" nel formato di WhatsApp ("@numero") e restituisce i JID menzionati.
