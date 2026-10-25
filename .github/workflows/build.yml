@@ -1,8 +1,9 @@
-# Compila Ping.exe su GitHub.
-#  - test su Windows (il sistema per cui Ping è fatto: su Linux la grafica richiederebbe librerie extra)
-#  - compilazione su Linux (niente cgo: si compila per Windows anche da lì), solo se i test passano
-#  - a ogni push: l'exe si scarica da "Actions" › esecuzione › Artifacts
-#  - con un tag tipo v1.2.0: l'exe viene allegato automaticamente a una Release
+# Compila Ping per Windows e Linux su GitHub.
+#  - test su Windows e su Linux
+#  - Windows: Ping.exe e Ping-arm64.exe (compilati da Linux, senza cgo)
+#  - Linux: ping-linux-x86_64.tar.gz (programma, icona, voce di menu e script di installazione)
+#  - a ogni push: i file si scaricano da "Actions" › esecuzione › Artifacts
+#  - con un tag tipo v1.2.0: vengono allegati automaticamente a una Release
 name: Build
 
 on:
@@ -16,34 +17,28 @@ permissions:
   contents: write # serve solo per creare le Release dai tag
 
 jobs:
-  test:
+  test-windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-
       - name: Controllo del codice
         run: go vet ./...
-
       - name: Test
         run: go test -short ./...
 
-  build:
-    needs: test
+  windows:
+    needs: test-windows
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-
       - name: Icona e informazioni sul file (risorse Windows)
         run: go run github.com/tc-hib/go-winres@latest make --arch amd64,arm64
-
       - name: Compila Ping.exe (x64 e ARM64)
         env:
           GOOS: windows
@@ -52,17 +47,58 @@ jobs:
           GOARCH=amd64 go build -trimpath -ldflags "-s -w -H windowsgui" -o dist/Ping.exe .
           GOARCH=arm64 go build -trimpath -ldflags "-s -w -H windowsgui" -o dist/Ping-arm64.exe .
           ls -la dist
-
       - uses: actions/upload-artifact@v4
         with:
-          name: Ping
+          name: Ping-windows
           path: dist/*.exe
 
+  linux:
+    # Ubuntu 22.04: una glibc non troppo recente, così il programma parte anche su distribuzioni
+    # un po' più vecchie; su Fedora, Bazzite, Arch, Ubuntu recenti funziona senza problemi
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Librerie per la grafica (Wayland, X11, OpenGL)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q gcc pkg-config libwayland-dev libx11-dev libx11-xcb-dev \
+            libxkbcommon-x11-dev libgles2-mesa-dev libegl1-mesa-dev libffi-dev libxcursor-dev libvulkan-dev
+      - name: Controllo del codice e test
+        run: |
+          go vet ./...
+          go test -short ./...
+      - name: Compila e prepara il pacchetto
+        run: |
+          mkdir -p dist pkg/ping-whatsapp
+          go build -trimpath -ldflags "-s -w" -o pkg/ping-whatsapp/ping-whatsapp .
+          cp packaging/linux/install.sh packaging/linux/ping-whatsapp.desktop pkg/ping-whatsapp/
+          cp winres/icon256.png pkg/ping-whatsapp/ping-whatsapp.png
+          cp LICENSE pkg/ping-whatsapp/
+          tar -C pkg -czf dist/ping-linux-x86_64.tar.gz ping-whatsapp
+          ls -la dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Ping-linux
+          path: dist/*.tar.gz
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
       - name: Pubblica la Release
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.exe
+          files: |
+            dist/*.exe
+            dist/*.tar.gz
           generate_release_notes: true
           prerelease: false
           make_latest: true

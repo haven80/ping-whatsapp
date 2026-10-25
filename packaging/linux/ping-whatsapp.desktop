@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Ping
+GenericName=Client WhatsApp
+Comment=Client WhatsApp leggero in stile MSN Messenger
+Exec=ping-whatsapp
+Icon=ping-whatsapp
+Terminal=false
+Categories=Network;InstantMessaging;Chat;
+Keywords=WhatsApp;chat;messaggi;
+StartupWMClass=ping-whatsapp
+StartupNotify=true

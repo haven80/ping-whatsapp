@@ -4,13 +4,14 @@
 
 # Ping
 
-**Un client WhatsApp per Windows leggero, nativo, in stile MSN Messenger.**
+**Un client WhatsApp per Windows e Linux leggero, nativo, in stile MSN Messenger.**
 
 Lista contatti compatta, una finestra per ogni conversazione, nessun browser nascosto dentro.
 
 [![Build](https://github.com/haven80/ping-whatsapp/actions/workflows/build.yml/badge.svg)](https://github.com/haven80/ping-whatsapp/actions/workflows/build.yml)
 [![Ultima versione](https://img.shields.io/github/v/release/haven80/ping-whatsapp?include_prereleases&label=versione&color=1f9d7a)](https://github.com/haven80/ping-whatsapp/releases)
 ![Windows 10 e 11](https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?logo=windows&logoColor=white)
+![Linux](https://img.shields.io/badge/Linux-Wayland%20%7C%20X11-FCC624?logo=linux&logoColor=black)
 ![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)
 [![Licenza GPL-3.0](https://img.shields.io/badge/licenza-GPL--3.0-blue)](LICENSE)
 
@@ -118,8 +119,23 @@ Ricerca di chat e contatti per nome · chat archiviate · conteggio dei non lett
 3. **Collega il telefono:** su WhatsApp apri *Impostazioni › Dispositivi collegati › Collega un dispositivo* e inquadra il codice QR.
 4. Dopo la sincronizzazione compare la lista delle chat. **Un clic apre la conversazione** in una finestra a sé.
 
+### Su Linux
+
+Funziona su Fedora, Bazzite, Ubuntu, Arch e simili, con Wayland o X11 (KDE, GNOME…).
+
+1. Scarica `ping-linux-x86_64.tar.gz` dalla [pagina delle versioni](https://github.com/haven80/ping-whatsapp/releases) ed estrailo.
+2. Nella cartella `ping-whatsapp` esegui `./install.sh`. Installa solo per il tuo utente, senza `sudo`: va bene anche sui sistemi immutabili come Bazzite e Silverblue.
+3. Apri **Ping** dal menu delle applicazioni e collega il telefono come sopra.
+
+Per disinstallarlo: `./install.sh --remove`.
+
+Facoltativi, di solito già presenti:
+- **ffmpeg**: GIF animate nella chat e invio di GIF;
+- **wl-clipboard** (Wayland) o **xclip** (X11): incollare immagini e file con Ctrl+V;
+- un'**area di notifica**: KDE ce l'ha; su GNOME serve l'estensione *AppIndicator* (su Bazzite è già attiva). Senza, chiudere la finestra chiude Ping.
+
 > [!TIP]
-> Vuoi vedere com'è senza collegare il tuo numero? Avvia `Ping.exe -demo`: mostra l'interfaccia con conversazioni di prova. Tutte le immagini di questa pagina vengono da lì.
+> Vuoi vedere com'è senza collegare il tuo numero? Avvia `Ping.exe -demo` (su Linux `ping-whatsapp -demo`): mostra l'interfaccia con conversazioni di prova. Tutte le immagini di questa pagina vengono da lì.
 
 ### Scorciatoie e gesti
 
@@ -171,7 +187,8 @@ Cancellando la cartella si riparte da zero.
 
 - **Chiamate vocali e video:** compaiono nella chat, ma si rispondono dal telefono.
 - **Non ancora supportati:** voto nei sondaggi, registrazione di vocali, stati.
-- **Video normali:** si aprono nel lettore di Windows. Le GIF invece si animano nella chat.
+- **Video normali:** si aprono nel lettore del sistema. Le GIF invece si animano nella chat.
+- **Su Linux:** niente trascinamento di file nella chat (usa la graffetta o Ctrl+V) e le finestre non ricordano la posizione: su Wayland la decide il desktop.
 
 > [!WARNING]
 > **Ping non è un prodotto WhatsApp né Meta, e non è affiliato a loro.** Usare un client non ufficiale va contro i termini di servizio di WhatsApp. Per un uso personale normale i blocchi sono rari, ma il rischio non è zero e riguarda il tuo numero vero. Se vuoi provarlo con prudenza, inizia con un numero secondario.
@@ -204,7 +221,7 @@ Apri una [segnalazione](https://github.com/haven80/ping-whatsapp/issues) allegan
 
 ## Compilare dai sorgenti
 
-Ping è scritto in **Go**, senza cgo: si compila per Windows da qualsiasi sistema.
+Ping è scritto in **Go**. Per Windows non serve cgo: si compila da qualsiasi sistema.
 
 ```bash
 git clone https://github.com/haven80/ping-whatsapp.git
@@ -213,11 +230,20 @@ go run github.com/tc-hib/go-winres@latest make --arch amd64      # icona e infor
 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w -H windowsgui" -o Ping.exe .
 ```
 
+Per Linux servono gcc e le librerie di sviluppo di Wayland, X11 ed EGL. Su Fedora:
+
+```bash
+sudo dnf install gcc pkg-config wayland-devel libX11-devel libxkbcommon-x11-devel mesa-libGLES-devel mesa-libEGL-devel libXcursor-devel vulkan-headers
+go build -trimpath -ldflags "-s -w" -o ping-whatsapp .
+```
+
+Su Bazzite conviene compilare dentro un contenitore Fedora (`distrobox create -i fedora` e poi `distrobox enter fedora`).
+
 **Con GitHub Actions** ([`.github/workflows/build.yml`](.github/workflows/build.yml)):
 
-1. a ogni push vengono eseguiti controlli e test su Windows;
-2. se passano, Ping viene compilato per x64 e ARM64;
-3. gli `.exe` si scaricano da *Actions › Artifacts*.
+1. a ogni push vengono eseguiti controlli e test su Windows e su Linux;
+2. se passano, Ping viene compilato per Windows (x64 e ARM64) e per Linux (x86_64);
+3. i file si scaricano da *Actions › Artifacts*.
 
 Un tag `v*` (per esempio `git tag v1.0.0 && git push --tags`) pubblica una Release con gli eseguibili già allegati.
 
@@ -229,9 +255,10 @@ Un tag `v*` (per esempio `git tag v1.0.0 && git push --tags`) pubblica una Relea
 | Protocollo WhatsApp | [whatsmeow](https://github.com/tulir/whatsmeow), lo stesso usato dai bridge mautrix per Matrix |
 | Interfaccia | [Gio](https://gioui.org), interfaccia nativa disegnata sulla GPU |
 | Archivio locale | SQLite in Go puro ([modernc.org/sqlite](https://gitlab.com/cznic/sqlite)) |
-| Video e GIF | Media Foundation di Windows: niente ffmpeg |
+| Video e GIF | Media Foundation su Windows (niente ffmpeg), ffmpeg su Linux |
 | Sticker WebP | [nativewebp](https://github.com/HugoSmits86/nativewebp) |
 | Integrazione con Windows | API Win32: area di notifica, appunti, trascinamento, notifiche |
+| Integrazione con Linux | D-Bus: notifiche, area di notifica ([systray](https://github.com/fyne-io/systray)), portale per scegliere i file, tema chiaro/scuro |
 
 </details>
 
@@ -246,6 +273,8 @@ Ping è software libero, distribuito con licenza **GNU GPL v3** (vedi [LICENSE](
 | [modernc.org/sqlite](https://gitlab.com/cznic/sqlite) | BSD |
 | [nativewebp](https://github.com/HugoSmits86/nativewebp), [go-qrcode](https://github.com/skip2/go-qrcode) | MIT |
 | [Noto Color Emoji](https://github.com/googlefonts/noto-emoji) | SIL Open Font License (vedi `fonts/`) |
+| [Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons) (icone su Linux) | MIT (vedi `fonts/`) |
+| [systray](https://github.com/fyne-io/systray), [godbus](https://github.com/godbus/dbus) | Apache 2.0 / BSD |
 
 WhatsApp è un marchio di WhatsApp LLC. Ping è un progetto indipendente e non è collegato, approvato o sponsorizzato da WhatsApp o Meta.
 

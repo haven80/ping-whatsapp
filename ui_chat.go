@@ -53,6 +53,7 @@ type chatWin struct {
 
 	profiles    []*profileView // schede aperte (l'ultima è quella visibile)
 	wantProfile bool           // chiesta da un'altra finestra (protetta da noticeMu)
+	gioPaste    bool           // incollare il testo con il meccanismo di Gio
 
 	list      widget.List
 	editor    widget.Editor
@@ -227,6 +228,10 @@ func (cw *chatWin) layout(gtx C) D {
 		if ke, ok := ev.(key.Event); ok && ke.State == key.Press {
 			cw.paste()
 		}
+	}
+	if cw.gioPaste {
+		cw.gioPaste = false
+		gtx.Execute(clipboard.ReadCmd{Tag: &cw.editor})
 	}
 	for i := range cw.pending {
 		if cw.pending[i].remove.Clicked(gtx) {
@@ -459,6 +464,8 @@ func (cw *chatWin) paste() {
 		}
 	case c.Text != "":
 		cw.editor.Insert(strings.ReplaceAll(c.Text, "\r\n", "\n"))
+	default:
+		cw.gioPaste = true // niente immagini né file: incolla il testo come fa di solito il campo
 	}
 }
 

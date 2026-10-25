@@ -3,9 +3,11 @@ module wamsn
 go 1.26.0
 
 require (
+	fyne.io/systray v1.12.2
 	gioui.org v0.10.3
 	gioui.org/x v0.10.3
 	github.com/HugoSmits86/nativewebp v1.3.0
+	github.com/godbus/dbus/v5 v5.2.2
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	go.mau.fi/whatsmeow v0.0.0-20261017175727-b2b1e71d45e2
 	golang.org/x/image v0.47.0
@@ -23,7 +25,6 @@ require (
 	github.com/dustin/go-humanize v1.1.0 // indirect
 	github.com/elliotchance/orderedmap/v3 v3.1.0 // indirect
 	github.com/go-text/typesetting v0.3.5 // indirect
-	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect

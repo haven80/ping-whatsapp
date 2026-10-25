@@ -15,3 +15,5 @@ func hwndOf(e event.Event) (uintptr, bool) {
 }
 
 func trayAvailable() bool { return tray.hwnd != 0 }
+
+const closeToTray = false // Windows: la finestra principale si nasconde

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"gioui.org/app"
@@ -267,6 +268,13 @@ func (u *UI) incoming(c Chat, m *Message) {
 }
 
 func (u *UI) ShowMain() {
+	if m := u.main; m != nil && m.closed.Load() {
+		select {
+		case m.reopen <- struct{}{}:
+		default:
+		}
+		return
+	}
 	if u.main != nil {
 		h := u.main.hwnd
 		go ShowHWND(h)
@@ -318,8 +326,7 @@ func (u *UI) OpenChat(jid string) {
 		if focused {
 			go u.be.MarkRead(jid)
 		}
-		go ShowHWND(m.hwnd)
-		m.w.Perform(system.ActionRaise)
+		u.ShowMain()
 		m.w.Invalidate()
 		return
 	}
@@ -374,6 +381,8 @@ type mainWin struct {
 	embed  *chatWin // finestra unica: la chat mostrata a destra (protetta da u.mu)
 	single bool     // modalità con cui è disegnata adesso
 	placed bool
+	closed atomic.Bool   // Linux: finestra chiusa, Ping resta nell'area di notifica
+	reopen chan struct{} // richiesta di riaprirla
 
 	bookVer  uint64
 	toldTray bool
@@ -382,7 +391,7 @@ type mainWin struct {
 }
 
 func (u *UI) RunMain() {
-	m := &mainWin{u: u, w: new(app.Window), th: newTheme(), rows: map[string]*widget.Clickable{}, avBtns: map[string]*widget.Clickable{}}
+	m := &mainWin{u: u, w: new(app.Window), th: newTheme(), rows: map[string]*widget.Clickable{}, avBtns: map[string]*widget.Clickable{}, reopen: make(chan struct{}, 1)}
 	m.search.SingleLine = true
 	m.list.Axis = layout.Vertical
 	u.main = m
@@ -450,12 +459,30 @@ func (m *mainWin) run() {
 	for {
 		switch e := m.w.Event().(type) {
 		case app.DestroyEvent:
+			if closeToTray && m.closed.Load() && trayAvailable() {
+				// Linux: la finestra è chiusa davvero ma Ping resta nell'area di notifica;
+				// "Apri Ping" la ricrea (la stessa app.Window si riapre alla prossima Event)
+				m.u.mu.Lock()
+				m.focused = false
+				m.u.mu.Unlock()
+				m.u.focusChanged()
+				<-m.reopen
+				m.w.Option(app.Title("Ping"), m.sizeOption(), app.MinSize(unit.Dp(280), unit.Dp(420)))
+				m.closed.Store(false)
+				continue
+			}
 			m.u.Quit()
 			return
 		case *app.ClosingEvent:
 			// chiudere la finestra la nasconde nell'area di notifica
 			m.u.rememberPlace(m.placeKey(), m.hwnd)
-			if trayAvailable() {
+			if trayAvailable() && closeToTray {
+				m.closed.Store(true)
+				if !m.toldTray {
+					m.toldTray = true
+					Notify("Ping è ancora attivo", "Lo trovi nell'area di notifica. Per chiuderlo: clic sull'icona › Esci.")
+				}
+			} else if trayAvailable() {
 				e.Abort()
 				// Windows sta aspettando la nostra risposta a WM_CLOSE: nasconderla adesso, dallo
 				// stesso giro, bloccherebbe tutto. Lo si fa subito dopo, in parallelo.

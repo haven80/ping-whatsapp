@@ -85,8 +85,6 @@ const (
 	icDoc     = ""
 	icChevron = ""
 	icChevUp  = ""
-	iconFace  = font.Typeface("Segoe Fluent Icons,Segoe MDL2 Assets")
-	textFace  = font.Typeface("Segoe UI Variable Text,Segoe UI,Ping Emoji,sans-serif")
 	emojiFace = font.Typeface("Ping Emoji")
 )
 
@@ -97,11 +95,16 @@ var emojiTTF []byte
 // il font emoji di Windows è vettoriale a colori e Gio lo mostrerebbe in bianco e nero.
 func newTheme() *material.Theme {
 	th := material.NewTheme()
-	var opts []text.ShaperOption
-	if faces, err := opentype.ParseCollection(emojiTTF); err == nil {
-		for i := range faces {
-			faces[i].Font.Typeface = emojiFace
+	var faces []font.FontFace // un'unica raccolta: più WithCollection non si sommano
+	if em, err := opentype.ParseCollection(emojiTTF); err == nil {
+		for i := range em {
+			em[i].Font.Typeface = emojiFace
 		}
+		faces = append(faces, em...)
+	}
+	faces = append(faces, platformFaces()...)
+	var opts []text.ShaperOption
+	if len(faces) > 0 {
 		opts = append(opts, text.WithCollection(faces))
 	}
 	th.Shaper = text.NewShaper(opts...)
