@@ -293,6 +293,20 @@ func (u *UI) OpenChatWith(jid, name string) {
 	}
 }
 
+// OpenProfile apre la chat e ci mostra la scheda del contatto o del gruppo.
+func (u *UI) OpenProfile(jid string) {
+	u.OpenChat(jid)
+	u.mu.Lock()
+	cw := u.chats[jid]
+	if m := u.main; m != nil && m.embed != nil && m.embed.jid == jid && u.Settings().Single {
+		cw = m.embed
+	}
+	u.mu.Unlock()
+	if cw != nil {
+		cw.RequestProfile()
+	}
+}
+
 func (u *UI) OpenChat(jid string) {
 	if m := u.main; m != nil && u.Settings().Single {
 		u.mu.Lock()
@@ -338,6 +352,7 @@ type mainWin struct {
 	search      widget.Editor
 	list        widget.List
 	rows        map[string]*widget.Clickable
+	avBtns      map[string]*widget.Clickable // foto nelle righe: aprono la scheda
 	tabChats    widget.Clickable
 	tabBook     widget.Clickable
 	tab         int
@@ -367,7 +382,7 @@ type mainWin struct {
 }
 
 func (u *UI) RunMain() {
-	m := &mainWin{u: u, w: new(app.Window), th: newTheme(), rows: map[string]*widget.Clickable{}}
+	m := &mainWin{u: u, w: new(app.Window), th: newTheme(), rows: map[string]*widget.Clickable{}, avBtns: map[string]*widget.Clickable{}}
 	m.search.SingleLine = true
 	m.list.Axis = layout.Vertical
 	u.main = m
@@ -901,6 +916,12 @@ func (m *mainWin) contactList(gtx C) D {
 		}
 		return layout.Center.Layout(gtx, lbl(th, 12.5, p.Faint, msg).Layout)
 	}
+	// clic sulle foto (prima delle righe, che le contengono)
+	for jid, cl := range m.avBtns {
+		if cl.Clicked(gtx) {
+			m.u.OpenProfile(jid)
+		}
+	}
 	// clic sulle righe
 	for jid, cl := range m.rows {
 		if cl.Clicked(gtx) {
@@ -984,7 +1005,14 @@ func (m *mainWin) row(gtx C, cl *widget.Clickable, c Chat) D {
 			d = layout.Inset{Left: 12, Right: 14, Top: 8, Bottom: 8}.Layout(gtx, func(gtx C) D {
 				return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
 					layout.Rigid(func(gtx C) D {
-						return avatar(gtx, th, p, u.be, c.JID, c.Name, 44, c.IsGroup, pres.Online && !c.IsGroup, p.Bg)
+						ab := m.avBtns[c.JID]
+						if ab == nil {
+							ab = new(widget.Clickable)
+							m.avBtns[c.JID] = ab
+						}
+						return ab.Layout(gtx, func(gtx C) D {
+							return avatar(gtx, th, p, u.be, c.JID, c.Name, 44, c.IsGroup, pres.Online && !c.IsGroup, p.Bg)
+						})
 					}),
 					layout.Rigid(layout.Spacer{Width: 12}.Layout),
 					layout.Flexed(1, func(gtx C) D {

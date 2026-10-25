@@ -90,7 +90,7 @@ Preferisci tutto insieme? In **Opzioni › Finestre** scegli **Unica**: lista e 
 - **Menzioni** con `@`: compare l'elenco dei partecipanti
 - Le menzioni ricevute mostrano il nome, non il numero
 - Nome colorato di chi scrive
-- Clic su un partecipante: chat privata con lui
+- Clic su foto o nome: **scheda** con foto grande, info, numero e partecipanti
 - Foto di chi scrive accanto ai messaggi (opzionale)
 
 </td>

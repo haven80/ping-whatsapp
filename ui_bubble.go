@@ -115,7 +115,7 @@ func (cw *chatWin) bubbleRow(gtx C, r chatRow) D {
 							st := op.Offset(image.Pt(ax, 0)).Push(gtx.Ops)
 							if !m.FromMe && m.SenderName != "" {
 								sender, name, msg := m.Sender, m.SenderName, m
-								cw.click("sav:"+m.ID, func() { cw.u.OpenChatWith(sender, name) }).Layout(gtx, func(gtx C) D {
+								cw.click("sav:"+m.ID, func() { cw.showProfile(sender, name) }).Layout(gtx, func(gtx C) D {
 									pointer.CursorPointer.Add(gtx.Ops)
 									return cw.senderAvatar(gtx, msg, avSize)
 								})
@@ -510,7 +510,7 @@ func (cw *chatWin) bubble(gtx C, m *Message, first bool) D {
 	if first && !m.FromMe && m.SenderName != "" {
 		// clic sul nome: chat privata con quel partecipante
 		sender, name := m.Sender, m.SenderName
-		cl := cw.click("snd:"+m.ID, func() { cw.u.OpenChatWith(sender, name) })
+		cl := cw.click("snd:"+m.ID, func() { cw.showProfile(sender, name) })
 		add(func(gtx C) D {
 			return cl.Layout(gtx, func(gtx C) D {
 				pointer.CursorPointer.Add(gtx.Ops)

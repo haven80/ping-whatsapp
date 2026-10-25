@@ -3,6 +3,7 @@ package main
 import (
 	"gioui.org/x/richtext"
 	"image"
+	"image/color"
 	"image/png"
 	"io"
 	"os"
@@ -49,6 +50,9 @@ type chatWin struct {
 	host    *mainWin                             // finestra unica: la finestra principale che ospita la chat
 	rich    map[string]*richtext.InteractiveText // testi con link cliccabili
 	lp      linkDraft                            // anteprima del link mentre si scrive
+
+	profiles    []*profileView // schede aperte (l'ultima è quella visibile)
+	wantProfile bool           // chiesta da un'altra finestra (protetta da noticeMu)
 
 	list      widget.List
 	editor    widget.Editor
@@ -295,6 +299,8 @@ func (cw *chatWin) layout(gtx C) D {
 		}
 		if ke, ok := ev.(key.Event); ok && ke.State == key.Press {
 			switch {
+			case len(cw.profiles) > 0:
+				cw.closeProfile()
 			case cw.fwd != nil:
 				cw.fwd = nil
 			case cw.menuFor != "":
@@ -331,6 +337,16 @@ func (cw *chatWin) layout(gtx C) D {
 		go cw.u.be.MarkRead(cw.jid)
 	}
 
+	cw.noticeMu.Lock()
+	want := cw.wantProfile
+	cw.wantProfile = false
+	cw.noticeMu.Unlock()
+	if want {
+		cw.showProfile(cw.jid, cw.title)
+	}
+	if len(cw.profiles) > 0 {
+		return cw.profileView(gtx)
+	}
 	if cw.fwd != nil {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(cw.header),
@@ -541,7 +557,7 @@ func (cw *chatWin) pendingStrip(gtx C) D {
 }
 
 func (cw *chatWin) header(gtx C) D {
-	th, p, be := cw.th, cw.pal, cw.u.be
+	p, be := cw.pal, cw.u.be
 	c, _ := be.ChatByJID(cw.jid)
 	if c.Name == "" {
 		c.Name = cw.title
@@ -566,7 +582,22 @@ func (cw *chatWin) header(gtx C) D {
 		}
 	}
 	m := op.Record(gtx.Ops)
-	d := layout.Inset{Left: 14, Right: 14, Top: 10, Bottom: 10}.Layout(gtx, func(gtx C) D {
+	name := c.Name
+	d := cw.click("hdr", func() { cw.showProfile(cw.jid, name) }).Layout(gtx, func(gtx C) D {
+		pointer.CursorPointer.Add(gtx.Ops)
+		return cw.headerContent(gtx, c, pres, sub, subCol)
+	})
+	call := m.Stop()
+	fillRect(gtx, p.Surface, image.Rectangle{Max: d.Size})
+	fillRect(gtx, p.Divider, image.Rect(0, d.Size.Y-1, d.Size.X, d.Size.Y))
+	call.Add(gtx.Ops)
+	return d
+}
+
+func (cw *chatWin) headerContent(gtx C, c Chat, pres Presence, sub string, subCol color.NRGBA) D {
+	th, p, be := cw.th, cw.pal, cw.u.be
+	return layout.Inset{Left: 14, Right: 14, Top: 10, Bottom: 10}.Layout(gtx, func(gtx C) D {
+		gtx.Constraints.Min.X = gtx.Constraints.Max.X
 		return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
 			layout.Rigid(func(gtx C) D {
 				return avatar(gtx, th, p, be, cw.jid, c.Name, 38, c.IsGroup, pres.Online && !c.IsGroup, p.Surface)
@@ -589,11 +620,6 @@ func (cw *chatWin) header(gtx C) D {
 			}),
 		)
 	})
-	call := m.Stop()
-	fillRect(gtx, p.Surface, image.Rectangle{Max: d.Size})
-	fillRect(gtx, p.Divider, image.Rect(0, d.Size.Y-1, d.Size.X, d.Size.Y))
-	call.Add(gtx.Ops)
-	return d
 }
 
 func (cw *chatWin) messages(gtx C) D {
