@@ -1,5 +1,7 @@
-# Compila Ping.exe su GitHub. Nessun cgo: si compila per Windows anche da Linux.
-#  - a ogni push e pull request: build + test, l'exe si scarica da "Actions" › esecuzione › Artifacts
+# Compila Ping.exe su GitHub.
+#  - test su Windows (il sistema per cui Ping è fatto: su Linux la grafica richiederebbe librerie extra)
+#  - compilazione su Linux (niente cgo: si compila per Windows anche da lì), solo se i test passano
+#  - a ogni push: l'exe si scarica da "Actions" › esecuzione › Artifacts
 #  - con un tag tipo v1.2.0: l'exe viene allegato automaticamente a una Release
 name: Build
 
@@ -14,8 +16,8 @@ permissions:
   contents: write # serve solo per creare le Release dai tag
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  test:
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -23,8 +25,21 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Controllo del codice
+        run: go vet ./...
+
       - name: Test
         run: go test -short ./...
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
 
       - name: Icona e informazioni sul file (risorse Windows)
         run: go run github.com/tc-hib/go-winres@latest make --arch amd64,arm64
