@@ -57,6 +57,7 @@ Preferisci tutto insieme? In **Opzioni › Finestre** scegli **Unica**: lista e 
 - **Reazioni** rapide o con qualsiasi emoji
 - **Modifica** ed **elimina** (per tutti o solo per te)
 - **Inoltra** fino a 5 chat in un colpo
+- **Sondaggi:** creali dalla graffetta, vota con un clic, guarda chi ha votato cosa
 - **Copia** il testo di un messaggio
 - Spunte di consegna e lettura, "sta scrivendo…", online e ultimo accesso
 
@@ -190,7 +191,8 @@ Cancellando la cartella si riparte da zero.
 ## Limiti
 
 - **Chiamate vocali e video:** compaiono nella chat, ma si rispondono dal telefono.
-- **Non ancora supportati:** voto nei sondaggi, registrazione di vocali, stati.
+- **Non ancora supportati:** registrazione di vocali, stati.
+- **Sondaggi arrivati prima di collegare Ping:** si vedono con i voti, ma per votare serve il telefono (la chiave per cifrare il voto ce l'ha solo lui).
 - **Video normali:** si aprono nel lettore del sistema. Le GIF invece si animano nella chat.
 - **Su Linux:** niente trascinamento di file nella chat (usa la graffetta o Ctrl+V) e le finestre non ricordano la posizione: su Wayland la decide il desktop.
 

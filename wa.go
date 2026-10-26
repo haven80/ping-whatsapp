@@ -556,6 +556,11 @@ func (b *Backend) onMessage(e *events.Message, live bool) {
 
 	sender := b.norm(info.Sender)
 
+	// voti dei sondaggi
+	if msg.GetPollUpdateMessage() != nil {
+		b.onPollVote(e, chatID, sender)
+		return
+	}
 	// modifiche ed eliminazioni
 	if pm := msg.GetProtocolMessage(); pm != nil {
 		target := pm.GetKey().GetID()
@@ -744,6 +749,9 @@ func (b *Backend) onHistory(e *events.HistorySync) {
 			}
 			b.onMessage(ev, false)
 			b.applyHistoryStatus(chat.String(), wm)
+			if pus := wm.GetPollUpdates(); len(pus) > 0 {
+				b.historyPollVotes(b.norm(chat), chat.Server == types.GroupServer, wm.GetKey().GetID(), pus)
+			}
 		}
 		if conv.GetArchived() {
 			b.db.SetArchived(chat.String(), true)

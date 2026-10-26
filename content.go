@@ -34,6 +34,7 @@ type MsgExtra struct {
 	W         uint32   `json:"w,omitempty"`
 	H         uint32   `json:"h,omitempty"`
 	Animated  bool     `json:"a,omitempty"`
+	Max       uint32   `json:"mx,omitempty"` // sondaggi: quante opzioni si possono scegliere (0 = tutte)
 }
 
 func (e MsgExtra) encode() string {
@@ -210,6 +211,7 @@ func parseContent(m *waE2E.Message) (p parsed) {
 		}
 		p.Kind = KPoll
 		p.Extra.Title = pc.GetName()
+		p.Extra.Max = pc.GetSelectableOptionsCount()
 		for _, o := range pc.GetOptions() {
 			p.Extra.Options = append(p.Extra.Options, o.GetOptionName())
 		}

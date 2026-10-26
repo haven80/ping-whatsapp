@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"strings"
 	"sync"
 	"time"
@@ -65,6 +66,13 @@ type Message struct {
 	MediaPath   string     // file scaricato, se presente
 	Reactions   []Reaction // reazioni ricevute
 	Deleted     bool       // eliminato da chi l'ha scritto: il contenuto resta qui, nascosto se non richiesto
+	Votes       []PollVote // sondaggi: i voti ricevuti (uno per persona)
+}
+
+// PollVote: le opzioni scelte da una persona in un sondaggio ("me" = io).
+type PollVote struct {
+	Voter, Name string
+	Options     []string
 }
 
 type Reaction struct {
@@ -107,6 +115,9 @@ CREATE TABLE IF NOT EXISTS reactions(
 		"deleted INTEGER NOT NULL DEFAULT 0"} {
 		db.Exec("ALTER TABLE messages ADD COLUMN " + c)
 	}
+	db.Exec(`CREATE TABLE IF NOT EXISTS poll_votes(chat TEXT NOT NULL, poll_id TEXT NOT NULL, voter TEXT NOT NULL,
+  voter_name TEXT NOT NULL DEFAULT '', options TEXT NOT NULL DEFAULT '[]', ts INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY(chat, poll_id, voter))`)
 	db.Exec("ALTER TABLE chats ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0") // quando è stata fissata (0 = no)
 	return &Store{db: db}, nil
 }
@@ -304,6 +315,11 @@ func (s *Store) Messages(chat string, limit int) []Message {
 		out = append(out, m)
 	}
 	rows.Close()
+	for i := range out {
+		if out[i].Kind == KPoll {
+			out[i].Votes = s.pollVotesLocked(chat, out[i].ID)
+		}
+	}
 	// ordine cronologico
 	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
 		out[i], out[j] = out[j], out[i]
@@ -366,4 +382,52 @@ func (s *Store) Wipe() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.db.Exec(`DELETE FROM messages; DELETE FROM chats; DELETE FROM reactions;`)
+}
+
+// SetPollVote salva il voto (sostituisce quello precedente della stessa persona, se più vecchio).
+func (s *Store) SetPollVote(chat, poll, voter, name string, options []string, ts time.Time) {
+	b, _ := json.Marshal(options)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.db.Exec(`INSERT INTO poll_votes(chat,poll_id,voter,voter_name,options,ts) VALUES(?,?,?,?,?,?)
+		ON CONFLICT(chat,poll_id,voter) DO UPDATE SET options=excluded.options, ts=excluded.ts,
+		voter_name=CASE WHEN excluded.voter_name<>'' THEN excluded.voter_name ELSE voter_name END
+		WHERE excluded.ts>=poll_votes.ts`, chat, poll, voter, name, string(b), ts.UnixMilli())
+}
+
+func (s *Store) PollVotes(chat, poll string) []PollVote {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.pollVotesLocked(chat, poll)
+}
+
+func (s *Store) pollVotesLocked(chat, poll string) []PollVote {
+	rows, err := s.db.Query(`SELECT voter,voter_name,options FROM poll_votes WHERE chat=? AND poll_id=? ORDER BY ts`, chat, poll)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []PollVote
+	for rows.Next() {
+		var v PollVote
+		var opts string
+		rows.Scan(&v.Voter, &v.Name, &opts)
+		json.Unmarshal([]byte(opts), &v.Options)
+		if len(v.Options) > 0 { // voto ritirato: non conta
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// PollOptions: le opzioni di un sondaggio salvato.
+func (s *Store) PollOptions(chat, id string) []string {
+	s.mu.Lock()
+	var extra, kind string
+	s.db.QueryRow(`SELECT extra, kind FROM messages WHERE chat=? AND id=?`, chat, id).Scan(&extra, &kind)
+	s.mu.Unlock()
+	if kind != KPoll {
+		return nil
+	}
+	return decodeExtra(extra).Options
 }

@@ -51,11 +51,16 @@ type chatWin struct {
 	rich    map[string]*richtext.InteractiveText // testi con link cliccabili
 	lp      linkDraft                            // anteprima del link mentre si scrive
 
-	profiles    []*profileView // schede aperte (l'ultima è quella visibile)
-	wantProfile bool           // chiesta da un'altra finestra (protetta da noticeMu)
-	gioPaste    bool           // incollare il testo con il meccanismo di Gio
-	showDel     bool           // con che impostazione sono stati caricati i messaggi eliminati
-	emojiVer    int            // versione del font emoji usata dal motore del testo
+	profiles    []*profileView  // schede aperte (l'ultima è quella visibile)
+	wantProfile bool            // chiesta da un'altra finestra (protetta da noticeMu)
+	gioPaste    bool            // incollare il testo con il meccanismo di Gio
+	showDel     bool            // con che impostazione sono stati caricati i messaggi eliminati
+	emojiVer    int             // versione del font emoji usata dal motore del testo
+	pollOpen    map[string]bool // sondaggi con l'elenco dei voti aperto
+	attachMenu  bool            // menu della graffetta aperto
+	attFile     widget.Clickable
+	attPoll     widget.Clickable
+	pollNew     *pollDraft // sondaggio in preparazione
 
 	list      widget.List
 	editor    widget.Editor
@@ -278,26 +283,17 @@ func (cw *chatWin) layout(gtx C) D {
 		gtx.Execute(key.FocusCmd{Tag: &cw.editor})
 	}
 	if cw.btnAttach.Clicked(gtx) {
-		owner, jid, reply := cw.owner(), cw.jid, cw.reply
-		cw.reply = nil
-		go func() {
-			path := PickFile(owner, "Invia un file",
-				"Foto e documenti|*.jpg;*.jpeg;*.png;*.pdf;*.doc;*.docx;*.xls;*.xlsx;*.ppt;*.pptx;*.zip;*.txt|Tutti i file|*.*")
-			if path == "" {
-				return
-			}
-			lower := strings.ToLower(path)
-			switch {
-			case strings.HasSuffix(lower, ".gif"):
-				if err := cw.u.be.SendGIFFile(jid, path, reply); err != nil {
-					cw.showNotice("GIF non inviata: " + err.Error())
-				}
-			case strings.HasSuffix(lower, ".mp4"):
-				cw.u.be.SendGIFFile(jid, path, reply) // breve video: inviato come GIF
-			default:
-				cw.u.be.SendFile(jid, path, reply)
-			}
-		}()
+		cw.attachMenu = !cw.attachMenu
+		gtx.Execute(op.InvalidateCmd{})
+	}
+	if cw.attFile.Clicked(gtx) {
+		cw.attachMenu = false
+		cw.pickAndSend()
+	}
+	if cw.attPoll.Clicked(gtx) {
+		cw.attachMenu = false
+		cw.startPoll()
+		gtx.Execute(op.InvalidateCmd{})
 	}
 	if cw.btnNoReply.Clicked(gtx) {
 		if cw.editing != nil {
@@ -314,6 +310,10 @@ func (cw *chatWin) layout(gtx C) D {
 		}
 		if ke, ok := ev.(key.Event); ok && ke.State == key.Press {
 			switch {
+			case cw.pollNew != nil:
+				cw.pollNew = nil
+			case cw.attachMenu:
+				cw.attachMenu = false
 			case len(cw.profiles) > 0:
 				cw.closeProfile()
 			case cw.fwd != nil:
@@ -362,6 +362,12 @@ func (cw *chatWin) layout(gtx C) D {
 	if len(cw.profiles) > 0 {
 		return cw.profileView(gtx)
 	}
+	if cw.pollNew != nil {
+		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+			layout.Rigid(cw.header),
+			layout.Flexed(1, cw.pollView),
+		)
+	}
 	if cw.fwd != nil {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
 			layout.Rigid(cw.header),
@@ -375,6 +381,7 @@ func (cw *chatWin) layout(gtx C) D {
 		layout.Rigid(cw.replyStrip),
 		layout.Rigid(cw.pendingStrip),
 		layout.Rigid(cw.linkStrip),
+		layout.Rigid(cw.attachStrip),
 		layout.Rigid(cw.mentionPopup),
 		layout.Rigid(cw.composer),
 	)
@@ -896,4 +903,28 @@ func (cw *chatWin) owner() uintptr {
 		return cw.host.hwnd
 	}
 	return cw.hwnd
+}
+
+// pickAndSend: scelta di un file da inviare (graffetta › File o foto).
+func (cw *chatWin) pickAndSend() {
+	owner, jid, reply := cw.owner(), cw.jid, cw.reply
+	cw.reply = nil
+	go func() {
+		path := PickFile(owner, "Invia un file",
+			"Foto e documenti|*.jpg;*.jpeg;*.png;*.pdf;*.doc;*.docx;*.xls;*.xlsx;*.ppt;*.pptx;*.zip;*.txt|Tutti i file|*.*")
+		if path == "" {
+			return
+		}
+		lower := strings.ToLower(path)
+		switch {
+		case strings.HasSuffix(lower, ".gif"):
+			if err := cw.u.be.SendGIFFile(jid, path, reply); err != nil {
+				cw.showNotice("GIF non inviata: " + err.Error())
+			}
+		case strings.HasSuffix(lower, ".mp4"):
+			cw.u.be.SendGIFFile(jid, path, reply) // breve video: inviato come GIF
+		default:
+			cw.u.be.SendFile(jid, path, reply)
+		}
+	}()
 }

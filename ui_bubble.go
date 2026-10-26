@@ -4,6 +4,7 @@ import (
 	"gioui.org/x/richtext"
 	"image"
 	"image/color"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -1115,33 +1116,218 @@ func (cw *chatWin) contact(gtx C, m *Message) D {
 
 func (cw *chatWin) poll(gtx C, m *Message) D {
 	th, p := cw.th, cw.pal
-	ch := []layout.FlexChild{
-		layout.Rigid(bold(lbl(th, 13.5, p.Text, "📊 "+m.Extra.Title)).Layout),
-		layout.Rigid(layout.Spacer{Height: 6}.Layout),
+	gtx.Constraints.Min.X = min(gtx.Constraints.Max.X, dp(gtx, 250))
+	counts := map[string]int{}
+	var mine []string
+	for _, v := range m.Votes {
+		for _, o := range v.Options {
+			counts[o]++
+		}
+		if v.Voter == "me" {
+			mine = v.Options
+		}
 	}
-	for _, o := range m.Extra.Options {
-		o := o
+	isMine := func(o string) bool {
+		for _, x := range mine {
+			if x == o {
+				return true
+			}
+		}
+		return false
+	}
+	voters := len(m.Votes)
+	hint := "Scegli un'opzione"
+	switch {
+	case m.Extra.Max == 0:
+		hint = "Scegli una o più opzioni"
+	case m.Extra.Max > 1:
+		hint = "Scegli fino a " + strconv.Itoa(int(m.Extra.Max)) + " opzioni"
+	}
+	ch := []layout.FlexChild{
+		layout.Rigid(bold(lbl(th, 13.5, p.Text, m.Extra.Title)).Layout),
+		layout.Rigid(func(gtx C) D {
+			l := lbl(th, 11, p.Faint, hint)
+			l.Font.Style = font.Italic
+			return layout.Inset{Top: 2, Bottom: 8}.Layout(gtx, l.Layout)
+		}),
+	}
+	msg := *m
+	for i, o := range m.Extra.Options {
+		o, sel, n := o, isMine(o), counts[o]
+		cl := cw.click("pv:"+m.ID+":"+strconv.Itoa(i), func() { cw.vote(&msg, o) })
 		ch = append(ch, layout.Rigid(func(gtx C) D {
-			return layout.Inset{Bottom: 5}.Layout(gtx, func(gtx C) D {
-				return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
-					layout.Rigid(func(gtx C) D {
-						s := dp(gtx, 14)
-						r := image.Rectangle{Max: image.Pt(s, s)}
-						paint.FillShape(gtx.Ops, p.Faint, clip.Stroke{Path: clip.Ellipse(r).Path(gtx.Ops), Width: float32(dp(gtx, 1.5))}.Op())
-						return D{Size: r.Max}
-					}),
-					layout.Rigid(layout.Spacer{Width: 8}.Layout),
-					layout.Rigid(lbl(th, 13, p.Text, o).Layout),
-				)
+			return cl.Layout(gtx, func(gtx C) D {
+				pointer.CursorPointer.Add(gtx.Ops)
+				return layout.Inset{Bottom: 9}.Layout(gtx, func(gtx C) D {
+					gtx.Constraints.Min.X = gtx.Constraints.Max.X
+					return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+						layout.Rigid(func(gtx C) D {
+							return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+								layout.Rigid(func(gtx C) D { return pollMark(gtx, th, p, sel, m.Extra.Max != 1, cl.Hovered()) }),
+								layout.Rigid(layout.Spacer{Width: 8}.Layout),
+								layout.Flexed(1, lbl(th, 13, p.Text, o).Layout),
+								layout.Rigid(func(gtx C) D {
+									if n == 0 {
+										return D{}
+									}
+									return layout.Inset{Left: 8}.Layout(gtx, lbl(th, 12, p.Muted, strconv.Itoa(n)).Layout)
+								}),
+							)
+						}),
+						layout.Rigid(func(gtx C) D {
+							// barra: quota di chi ha votato che ha scelto questa opzione
+							w := gtx.Constraints.Max.X - dp(gtx, 26)
+							h := dp(gtx, 4)
+							defer op.Offset(image.Pt(dp(gtx, 26), dp(gtx, 5))).Push(gtx.Ops).Pop()
+							fillRRect(gtx, withAlpha(p.Faint, 0x40), image.Rect(0, 0, w, h), h/2)
+							if n > 0 && voters > 0 {
+								fillRRect(gtx, p.Accent, image.Rect(0, 0, max(h, w*n/voters), h), h/2)
+							}
+							return D{Size: image.Pt(w+dp(gtx, 26), h+dp(gtx, 5))}
+						}),
+					)
+				})
 			})
 		}))
 	}
+	// in fondo: numero dei voti e chi ha votato cosa
+	open := cw.pollOpen[m.ID]
+	toggle := cw.click("pvl:"+m.ID, func() {
+		if cw.pollOpen == nil {
+			cw.pollOpen = map[string]bool{}
+		}
+		cw.pollOpen[msg.ID] = !cw.pollOpen[msg.ID]
+	})
 	ch = append(ch, layout.Rigid(func(gtx C) D {
-		l := lbl(th, 11, p.Faint, "Per votare usa il telefono")
-		l.Font.Style = font.Italic
-		return l.Layout(gtx)
+		t := "Nessun voto"
+		switch voters {
+		case 0:
+		case 1:
+			t = "1 voto"
+		default:
+			t = strconv.Itoa(voters) + " voti"
+		}
+		return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+			layout.Rigid(lbl(th, 11.5, p.Muted, t).Layout),
+			layout.Rigid(func(gtx C) D {
+				if voters == 0 {
+					return D{}
+				}
+				label := "Vedi voti"
+				if open {
+					label = "Nascondi"
+				}
+				return layout.Inset{Left: 10}.Layout(gtx, func(gtx C) D {
+					return toggle.Layout(gtx, func(gtx C) D {
+						pointer.CursorPointer.Add(gtx.Ops)
+						return bold(lbl(th, 11.5, p.Accent, label)).Layout(gtx)
+					})
+				})
+			}),
+		)
 	}))
+	if open && voters > 0 {
+		for _, o := range m.Extra.Options {
+			var names []string
+			for _, v := range m.Votes {
+				for _, x := range v.Options {
+					if x == o {
+						n := v.Name
+						if v.Voter == "me" {
+							n = "Tu"
+						} else if n == "" {
+							n = strings.TrimSuffix(v.Voter, "@s.whatsapp.net")
+						}
+						names = append(names, n)
+					}
+				}
+			}
+			if len(names) == 0 {
+				continue
+			}
+			o, list := o, strings.Join(names, ", ")
+			ch = append(ch, layout.Rigid(func(gtx C) D {
+				return layout.Inset{Top: 6}.Layout(gtx, func(gtx C) D {
+					return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+						layout.Rigid(bold(lbl(th, 11.5, p.Text, o)).Layout),
+						layout.Rigid(lbl(th, 11.5, p.Muted, list).Layout),
+					)
+				})
+			}))
+		}
+	}
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, ch...)
+}
+
+// pollMark: cerchio (una scelta) o quadrato (più scelte), pieno se scelto.
+func pollMark(gtx C, th *material.Theme, p Pal, on, multi, hover bool) D {
+	s := dp(gtx, 18)
+	r := image.Rectangle{Max: image.Pt(s, s)}
+	rad := s / 2
+	if multi {
+		rad = dp(gtx, 4)
+	}
+	switch {
+	case on:
+		fillRRect(gtx, p.Accent, r, rad)
+		g := gtx
+		g.Constraints = layout.Exact(r.Max)
+		layout.Center.Layout(g, icon(th, 10, p.AccentTxt, icCheck).Layout)
+	default:
+		col := p.Faint
+		if hover {
+			col = p.Accent
+		}
+		fillRRect(gtx, col, r, rad)
+		fillRRect(gtx, p.Surface, r.Inset(dp(gtx, 1.5)), rad-dp(gtx, 1))
+	}
+	return D{Size: r.Max}
+}
+
+// vote: clic su un'opzione del sondaggio.
+func (cw *chatWin) vote(m *Message, option string) {
+	var mine []string
+	for _, v := range m.Votes {
+		if v.Voter == "me" {
+			mine = append(mine, v.Options...)
+		}
+	}
+	has := false
+	var next []string
+	for _, x := range mine {
+		if x == option {
+			has = true
+		} else {
+			next = append(next, x)
+		}
+	}
+	switch {
+	case m.Extra.Max == 1 && has:
+		next = nil // tolgo il voto
+	case m.Extra.Max == 1:
+		next = []string{option}
+	case !has:
+		if m.Extra.Max > 1 && len(mine) >= int(m.Extra.Max) {
+			cw.showNotice("Puoi scegliere al massimo " + strconv.Itoa(int(m.Extra.Max)) + " opzioni")
+			return
+		}
+		next = append(mine, option)
+	}
+	// nell'ordine del sondaggio
+	var ordered []string
+	for _, o := range m.Extra.Options {
+		for _, x := range next {
+			if x == o {
+				ordered = append(ordered, o)
+			}
+		}
+	}
+	msg, be := *m, cw.u.be
+	safeGo("voto sondaggio", func() {
+		if err := be.VotePoll(&msg, ordered); err != nil {
+			cw.showNotice("Voto non inviato: " + err.Error())
+		}
+	})
 }
 
 func (cw *chatWin) event(gtx C, m *Message) D {
