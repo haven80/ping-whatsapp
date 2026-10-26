@@ -40,6 +40,7 @@ type Chat struct {
 	LastFromMe bool
 	Unread     int
 	Archived   bool
+	Pinned     int64 // momento in cui è stata fissata in alto (0 = non fissata)
 }
 
 type Message struct {
@@ -104,6 +105,7 @@ CREATE TABLE IF NOT EXISTS reactions(
 		"quote_text TEXT NOT NULL DEFAULT ''", "extra TEXT NOT NULL DEFAULT ''", "media_path TEXT NOT NULL DEFAULT ''"} {
 		db.Exec("ALTER TABLE messages ADD COLUMN " + c)
 	}
+	db.Exec("ALTER TABLE chats ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0") // quando è stata fissata (0 = no)
 	return &Store{db: db}, nil
 }
 
@@ -130,6 +132,13 @@ func (s *Store) SetChatName(jid, name string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.db.Exec(`UPDATE chats SET name=? WHERE jid=?`, name, jid)
+}
+
+// SetPinned fissa (ts > 0) o sblocca (ts = 0) la chat.
+func (s *Store) SetPinned(jid string, ts int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.db.Exec(`UPDATE chats SET pinned=? WHERE jid=?`, ts, jid)
 }
 
 func (s *Store) SetArchived(jid string, a bool) {
@@ -237,7 +246,7 @@ func (s *Store) MarkRead(chat string) []unreadRef {
 func (s *Store) Chats() []Chat {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	rows, err := s.db.Query(`SELECT jid,name,is_group,last_text,last_ts,last_me,unread,archived FROM chats ORDER BY last_ts DESC`)
+	rows, err := s.db.Query(`SELECT jid,name,is_group,last_text,last_ts,last_me,unread,archived,pinned FROM chats ORDER BY last_ts DESC`)
 	if err != nil {
 		return nil
 	}
@@ -247,7 +256,7 @@ func (s *Store) Chats() []Chat {
 		var c Chat
 		var g, me, ar int
 		var ts int64
-		rows.Scan(&c.JID, &c.Name, &g, &c.LastText, &ts, &me, &c.Unread, &ar)
+		rows.Scan(&c.JID, &c.Name, &g, &c.LastText, &ts, &me, &c.Unread, &ar, &c.Pinned)
 		c.IsGroup, c.LastFromMe, c.Archived = g == 1, me == 1, ar == 1
 		c.LastTime = time.Unix(ts, 0)
 		out = append(out, c)

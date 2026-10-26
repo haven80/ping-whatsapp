@@ -462,6 +462,15 @@ func (b *Backend) handle(evt any) {
 			b.db.SetArchived(b.norm(e.JID).String(), e.Action.GetArchived())
 			b.reloadChats("")
 		}
+	case *events.Pin: // fissata o sbloccata dal telefono
+		if e.Action != nil {
+			var ts int64
+			if e.Action.GetPinned() {
+				ts = e.Timestamp.Unix()
+			}
+			b.db.SetPinned(b.norm(e.JID).String(), ts)
+			b.reloadChats("")
+		}
 	case *events.MarkChatAsRead:
 		if e.Action != nil && e.Action.GetRead() {
 			b.db.MarkRead(b.norm(e.JID).String())
@@ -733,6 +742,9 @@ func (b *Backend) onHistory(e *events.HistorySync) {
 		}
 		if conv.GetArchived() {
 			b.db.SetArchived(chat.String(), true)
+		}
+		if p := conv.GetPinned(); p > 0 {
+			b.db.SetPinned(chat.String(), int64(p))
 		}
 		if u := int(conv.GetUnreadCount()); u > 0 {
 			b.db.MarkLastUnread(chat.String(), u)

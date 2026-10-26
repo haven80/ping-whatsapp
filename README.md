@@ -110,7 +110,7 @@ Preferisci tutto insieme? In **Opzioni › Finestre** scegli **Unica**: lista e 
 </div>
 
 ### E inoltre
-Ricerca di chat e contatti per nome · chat archiviate · conteggio dei non letti · notifiche di Windows con suono e lampeggio sulla barra · chiamate in arrivo segnalate nella chat · una sola istanza alla volta.
+Ricerca di chat e contatti per nome · **chat fissate in alto** (tasto destro sulla chat, sincronizzate con il telefono) · opzione per avere **le non lette in cima** · chat archiviate · conteggio dei non letti · notifiche di Windows con suono e lampeggio sulla barra · chiamate in arrivo segnalate nella chat · una sola istanza alla volta.
 
 ## Come si usa
 

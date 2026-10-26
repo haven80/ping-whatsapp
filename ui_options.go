@@ -3,6 +3,7 @@ package main
 import (
 	"image"
 	"image/color"
+	"runtime"
 	"strings"
 	"time"
 
@@ -30,6 +31,7 @@ type optionsState struct {
 	back       widget.Clickable
 	winSep     widget.Clickable
 	winOne     widget.Clickable
+	unreadTop  widget.Clickable
 	chatRight  widget.Clickable
 	chatLeft   widget.Clickable
 }
@@ -139,6 +141,10 @@ func (m *mainWin) optionsView(gtx C) D {
 	}
 	if o.winOne.Clicked(gtx) {
 		m.setSingle(true)
+		gtx.Execute(op.InvalidateCmd{})
+	}
+	if o.unreadTop.Clicked(gtx) {
+		u.Update(func(s *Settings) { s.UnreadTop = !s.UnreadTop })
 		gtx.Execute(op.InvalidateCmd{})
 	}
 	if o.chatRight.Clicked(gtx) {
@@ -301,9 +307,15 @@ func (m *mainWin) optionsView(gtx C) D {
 		section("FOTO"),
 		toggleRow(&o.photos, "Foto profilo nella lista", "Spento: elenco compatto stile ICQ", u.settings.ShowPhotos),
 		toggleRow(&o.chatPhotos, "Foto accanto ai messaggi", "Mostra chi scrive, come su MSN", u.settings.ChatPhotos),
+		section("ELENCO DELLE CHAT"),
+		toggleRow(&o.unreadTop, "Chat non lette in alto", "Subito sotto quelle fissate", u.Settings().UnreadTop),
+		layout.Rigid(func(gtx C) D {
+			return layout.Inset{Left: 18, Right: 18, Top: 2}.Layout(gtx,
+				lbl(th, 11.5, p.Faint, "Per fissare una chat in alto: tasto destro sulla chat › Fissa in alto (al massimo 3, come su WhatsApp).").Layout)
+		}),
 		section("AVVISI"),
 		toggleRow(&o.sound, "Suono per i nuovi messaggi", "", u.settings.Sound),
-		toggleRow(&o.notify, "Notifiche di Windows", "Quando Ping non è in primo piano", u.settings.Notify),
+		toggleRow(&o.notify, notifyLabel, "Quando Ping non è in primo piano", u.settings.Notify),
 		section("GIF E STICKER ONLINE"),
 		layout.Rigid(func(gtx C) D {
 			return layout.Inset{Left: 18, Right: 18}.Layout(gtx, func(gtx C) D {
@@ -383,3 +395,10 @@ func switchWidget(gtx C, p Pal, on bool) D {
 }
 
 func rgbWhite() color.NRGBA { return rgb(0xFFFFFF) }
+
+var notifyLabel = func() string {
+	if runtime.GOOS == "windows" {
+		return "Notifiche di Windows"
+	}
+	return "Notifiche del sistema"
+}()

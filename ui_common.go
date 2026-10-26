@@ -85,6 +85,7 @@ const (
 	icDoc     = ""
 	icChevron = ""
 	icChevUp  = ""
+	icPin     = "\uE718"
 	emojiFace = font.Typeface("Ping Emoji")
 )
 

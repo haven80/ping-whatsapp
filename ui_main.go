@@ -3,9 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"gioui.org/io/event"
 	"image"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -37,6 +39,7 @@ type Settings struct {
 	CustomerID string   `json:"customer_id"`
 	Single     bool     `json:"single_window"` // chat e lista nella stessa finestra
 	ChatLeft   bool     `json:"chat_left"`     // finestra unica: chat a sinistra della lista
+	UnreadTop  bool     `json:"unread_first"`  // chat non lette in cima (sotto quelle fissate)
 
 	Places map[string]WinPlace `json:"places,omitempty"` // posizione delle finestre (letta solo con place/savePlace)
 }
@@ -360,6 +363,12 @@ type mainWin struct {
 	list        widget.List
 	rows        map[string]*widget.Clickable
 	avBtns      map[string]*widget.Clickable // foto nelle righe: aprono la scheda
+	rowTags     map[string]*rowTagT          // aree per il tasto destro sulle righe
+	menuFor     string                       // chat con il menu del tasto destro aperto
+	menuErr     string
+	menuPin     widget.Clickable
+	menuRead    widget.Clickable
+	menuOpen    widget.Clickable
 	tabChats    widget.Clickable
 	tabBook     widget.Clickable
 	tab         int
@@ -391,7 +400,7 @@ type mainWin struct {
 }
 
 func (u *UI) RunMain() {
-	m := &mainWin{u: u, w: new(app.Window), th: newTheme(), rows: map[string]*widget.Clickable{}, avBtns: map[string]*widget.Clickable{}, reopen: make(chan struct{}, 1)}
+	m := &mainWin{u: u, w: new(app.Window), th: newTheme(), rows: map[string]*widget.Clickable{}, avBtns: map[string]*widget.Clickable{}, rowTags: map[string]*rowTagT{}, reopen: make(chan struct{}, 1)}
 	m.search.SingleLine = true
 	m.list.Axis = layout.Vertical
 	u.main = m
@@ -919,6 +928,7 @@ func (m *mainWin) items() []rowItem {
 		}
 		out = append(out, rowItem{chat: c})
 	}
+	sortChatRows(out, m.u.Settings().UnreadTop)
 	if len(arch) > 0 {
 		out = append(out, rowItem{special: "arch", count: len(arch)})
 		if m.showArch {
@@ -952,6 +962,30 @@ func (m *mainWin) contactList(gtx C) D {
 	// clic sulle righe
 	for jid, cl := range m.rows {
 		if cl.Clicked(gtx) {
+			m.menuFor = ""
+			m.u.OpenChat(jid)
+		}
+	}
+	// menu del tasto destro
+	if m.menuFor != "" {
+		c, _ := m.u.be.ChatByJID(m.menuFor)
+		if m.menuPin.Clicked(gtx) {
+			if err := m.u.be.SetPin(c.JID, c.Pinned == 0); err != nil {
+				m.menuErr = err.Error()
+			} else {
+				m.menuFor, m.menuErr = "", ""
+				m.list.Position = layout.Position{} // la chat fissata va in cima: si torna su
+			}
+			gtx.Execute(op.InvalidateCmd{})
+		}
+		if m.menuRead.Clicked(gtx) {
+			jid := c.JID
+			m.menuFor = ""
+			go m.u.be.MarkRead(jid)
+		}
+		if m.menuOpen.Clicked(gtx) {
+			jid := c.JID
+			m.menuFor = ""
 			m.u.OpenChat(jid)
 		}
 	}
@@ -968,7 +1002,115 @@ func (m *mainWin) contactList(gtx C) D {
 			cl = new(widget.Clickable)
 			m.rows[it.chat.JID] = cl
 		}
-		return m.row(gtx, cl, it.chat)
+		if m.tab != 0 {
+			return m.row(gtx, cl, it.chat)
+		}
+		// tasto destro: menu della chat
+		jid := it.chat.JID
+		tag := m.rowTags[jid]
+		if tag == nil {
+			tag = &rowTagT{jid}
+			m.rowTags[jid] = tag
+		}
+		for {
+			ev, ok := gtx.Event(pointer.Filter{Target: tag, Kinds: pointer.Press})
+			if !ok {
+				break
+			}
+			if pe, ok := ev.(pointer.Event); ok && pe.Buttons.Contain(pointer.ButtonSecondary) {
+				if m.menuFor == jid {
+					m.menuFor = ""
+				} else {
+					m.menuFor, m.menuErr = jid, ""
+				}
+				gtx.Execute(op.InvalidateCmd{})
+			}
+		}
+		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+			layout.Rigid(func(gtx C) D {
+				mc := op.Record(gtx.Ops)
+				d := m.row(gtx, cl, it.chat)
+				call := mc.Stop()
+				st := clip.Rect{Max: d.Size}.Push(gtx.Ops)
+				event.Op(gtx.Ops, tag)
+				call.Add(gtx.Ops)
+				st.Pop()
+				return d
+			}),
+			layout.Rigid(func(gtx C) D {
+				if m.menuFor != jid {
+					return D{}
+				}
+				return m.rowMenu(gtx, it.chat)
+			}),
+		)
+	})
+}
+
+// sortChatRows: prima le chat fissate (l'ultima fissata in cima), poi, se richiesto, quelle
+// non lette; per il resto resta l'ordine per ora dell'ultimo messaggio.
+func sortChatRows(out []rowItem, unreadTop bool) {
+	sort.SliceStable(out, func(i, k int) bool {
+		a, b := out[i].chat, out[k].chat
+		if (a.Pinned > 0) != (b.Pinned > 0) {
+			return a.Pinned > 0
+		}
+		if a.Pinned > 0 {
+			return a.Pinned > b.Pinned
+		}
+		if unreadTop && (a.Unread > 0) != (b.Unread > 0) {
+			return a.Unread > 0
+		}
+		return false
+	})
+}
+
+// rowMenu: azioni sulla chat (tasto destro sulla riga).
+func (m *mainWin) rowMenu(gtx C, c Chat) D {
+	th, p := m.th, m.pal
+	chip := func(cl *widget.Clickable, glyph, label string) layout.FlexChild {
+		return layout.Rigid(func(gtx C) D {
+			return layout.Inset{Right: 6, Bottom: 6}.Layout(gtx, func(gtx C) D {
+				return cl.Layout(gtx, func(gtx C) D {
+					pointer.CursorPointer.Add(gtx.Ops)
+					bg := p.Field
+					if cl.Hovered() {
+						bg = p.Hover
+					}
+					return rounded(gtx, bg, 9, 10, 6, func(gtx C) D {
+						return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+							layout.Rigid(func(gtx C) D {
+								if glyph == "" {
+									return D{}
+								}
+								return layout.Inset{Right: 6}.Layout(gtx, icon(th, 11, p.Accent, glyph).Layout)
+							}),
+							layout.Rigid(lbl(th, 12, p.Text, label).Layout),
+						)
+					})
+				})
+			})
+		})
+	}
+	pin := "Fissa in alto"
+	if c.Pinned > 0 {
+		pin = "Togli da in alto"
+	}
+	items := []layout.FlexChild{chip(&m.menuPin, icPin, pin)}
+	if c.Unread > 0 {
+		items = append(items, chip(&m.menuRead, icCheck, "Segna come letta"))
+	}
+	items = append(items, chip(&m.menuOpen, "", "Apri"))
+	return layout.Inset{Left: 66, Right: 12, Top: 2}.Layout(gtx, func(gtx C) D {
+		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+			layout.Rigid(func(gtx C) D { return layout.Flex{}.Layout(gtx, items...) }),
+			layout.Rigid(func(gtx C) D {
+				if m.menuErr == "" {
+					return D{}
+				}
+				return layout.Inset{Bottom: 6}.Layout(gtx, lbl(th, 11.5, p.Danger, m.menuErr).Layout)
+			}),
+		)
 	})
 }
 
@@ -1025,6 +1167,7 @@ func (m *mainWin) row(gtx C, cl *widget.Clickable, c Chat) D {
 						}
 						return l.Layout(gtx)
 					}),
+					layout.Rigid(func(gtx C) D { return m.pinMark(gtx, c) }),
 					layout.Rigid(func(gtx C) D { return m.badge(gtx, c.Unread) }),
 				)
 			})
@@ -1078,6 +1221,7 @@ func (m *mainWin) row(gtx C, cl *widget.Clickable, c Chat) D {
 										}
 										return one(lbl(th, 12.5, p.Muted, t)).Layout(gtx)
 									}),
+									layout.Rigid(func(gtx C) D { return m.pinMark(gtx, c) }),
 									layout.Rigid(func(gtx C) D { return m.badge(gtx, c.Unread) }),
 								)
 							}),
@@ -1096,6 +1240,14 @@ func (m *mainWin) row(gtx C, cl *widget.Clickable, c Chat) D {
 		call.Add(gtx.Ops)
 		return d
 	})
+}
+
+// pinMark: puntina accanto alle chat fissate in alto.
+func (m *mainWin) pinMark(gtx C, c Chat) D {
+	if c.Pinned == 0 || m.tab != 0 {
+		return D{}
+	}
+	return layout.Inset{Left: 6}.Layout(gtx, icon(m.th, 11, m.pal.Faint, icPin).Layout)
 }
 
 func (m *mainWin) badge(gtx C, n int) D {
