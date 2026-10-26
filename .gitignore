@@ -10,3 +10,8 @@ settings.json
 crash.log
 avatars/
 media/
+
+# eseguibili compilati in locale (go build)
+/wamsn
+/ping-whatsapp
+/ping-linux
