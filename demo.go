@@ -135,6 +135,7 @@ func fillDemo(b *Backend, u *UI) {
 			{Text: "Certo, alle 21 va bene?", FromMe: true, Time: ago(25 * time.Hour), Status: StRead},
 			{Text: "Perfetto 🍕", Time: ago(25 * time.Hour)},
 			{Text: "Ho prenotato da Gino, tavolo per quattro", Time: ago(12 * time.Minute)},
+			{Text: "Anzi no, Marco non viene… poi ti spiego", Time: ago(12 * time.Minute), Deleted: true},
 			{Text: "Porti tu il dolce?", Time: ago(11 * time.Minute)},
 		}},
 		{jid: "120363000000001@g.us", name: "Calcetto del giovedì", group: true, unread: 5, msgs: []Message{
@@ -204,6 +205,9 @@ func fillDemo(b *Backend, u *UI) {
 				m.Sender = "me"
 			}
 			b.addWithPreview(&m)
+			if m.Deleted {
+				b.db.MarkRevoked(m.Chat, m.ID)
+			}
 			for _, r := range m.Reactions {
 				b.db.SetReaction(c.jid, m.ID, r.Sender, r.Emoji, m.Time)
 			}

@@ -64,6 +64,7 @@ type Message struct {
 	Extra       MsgExtra
 	MediaPath   string     // file scaricato, se presente
 	Reactions   []Reaction // reazioni ricevute
+	Deleted     bool       // eliminato da chi l'ha scritto: il contenuto resta qui, nascosto se non richiesto
 }
 
 type Reaction struct {
@@ -102,7 +103,8 @@ CREATE TABLE IF NOT EXISTS reactions(
 	}
 	// colonne aggiunte dopo la prima versione (l'errore "già esiste" si ignora)
 	for _, c := range []string{"quote_id TEXT NOT NULL DEFAULT ''", "quote_sender TEXT NOT NULL DEFAULT ''",
-		"quote_text TEXT NOT NULL DEFAULT ''", "extra TEXT NOT NULL DEFAULT ''", "media_path TEXT NOT NULL DEFAULT ''"} {
+		"quote_text TEXT NOT NULL DEFAULT ''", "extra TEXT NOT NULL DEFAULT ''", "media_path TEXT NOT NULL DEFAULT ''",
+		"deleted INTEGER NOT NULL DEFAULT 0"} {
 		db.Exec("ALTER TABLE messages ADD COLUMN " + c)
 	}
 	db.Exec("ALTER TABLE chats ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0") // quando è stata fissata (0 = no)
@@ -187,6 +189,16 @@ func (s *Store) UpdateText(chat, id, text, kind string) {
 		media=CASE WHEN ?='deleted' THEN NULL ELSE media END WHERE chat=? AND id=?`, text, kind, kind, kind, chat, id)
 }
 
+// MarkRevoked segna come eliminato un messaggio senza cancellarne il contenuto.
+func (s *Store) MarkRevoked(chat, id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.db.Exec(`UPDATE messages SET deleted=1 WHERE chat=? AND id=?`, chat, id)
+	// se era l'ultimo messaggio, nella lista delle chat non si vede più il testo
+	s.db.Exec(`UPDATE chats SET last_text='🚫 Messaggio eliminato'
+		WHERE jid=? AND last_ts=(SELECT ts FROM messages WHERE chat=? AND id=?)`, chat, chat, id)
+}
+
 func (s *Store) SetStatus(chat string, ids []string, st int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -268,7 +280,7 @@ func (s *Store) Messages(chat string, limit int) []Message {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	rows, err := s.db.Query(`SELECT id,sender,sender_name,from_me,ts,text,kind,status,thumb,file_name,unread,media IS NOT NULL,
-		quote_id,quote_sender,quote_text,extra,media_path
+		quote_id,quote_sender,quote_text,extra,media_path,deleted
 		FROM messages WHERE chat=? ORDER BY ts DESC, rowid DESC LIMIT ?`, chat, limit)
 	if err != nil {
 		return nil
@@ -280,9 +292,10 @@ func (s *Store) Messages(chat string, limit int) []Message {
 		var me, un, hasMedia int
 		var ts int64
 		var extra string
+		var del int
 		rows.Scan(&m.ID, &m.Sender, &m.SenderName, &me, &ts, &m.Text, &m.Kind, &m.Status, &m.Thumb, &m.FileName, &un, &hasMedia,
-			&m.QuoteID, &m.QuoteSender, &m.QuoteText, &extra, &m.MediaPath)
-		m.FromMe, m.Unread = me == 1, un == 1
+			&m.QuoteID, &m.QuoteSender, &m.QuoteText, &extra, &m.MediaPath, &del)
+		m.FromMe, m.Unread, m.Deleted = me == 1, un == 1, del == 1
 		if hasMedia == 1 {
 			m.Media = []byte{1} // segnaposto: il proto vero si legge con MediaOf
 		}

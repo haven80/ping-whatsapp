@@ -32,6 +32,8 @@ type optionsState struct {
 	winSep     widget.Clickable
 	winOne     widget.Clickable
 	unreadTop  widget.Clickable
+	showDel    widget.Clickable
+	updates    widget.Clickable
 	chatRight  widget.Clickable
 	chatLeft   widget.Clickable
 }
@@ -142,6 +144,17 @@ func (m *mainWin) optionsView(gtx C) D {
 	if o.winOne.Clicked(gtx) {
 		m.setSingle(true)
 		gtx.Execute(op.InvalidateCmd{})
+	}
+	if o.showDel.Clicked(gtx) {
+		u.Update(func(s *Settings) { s.ShowDeleted = !s.ShowDeleted })
+		u.invalidateAll() // le chat aperte si ricaricano
+	}
+	if o.updates.Clicked(gtx) {
+		on := !u.Settings().CheckUpdates
+		u.Update(func(s *Settings) { s.CheckUpdates = on })
+		if on {
+			go u.checkUpdate()
+		}
 	}
 	if o.unreadTop.Clicked(gtx) {
 		u.Update(func(s *Settings) { s.UnreadTop = !s.UnreadTop })
@@ -313,8 +326,11 @@ func (m *mainWin) optionsView(gtx C) D {
 			return layout.Inset{Left: 18, Right: 18, Top: 2}.Layout(gtx,
 				lbl(th, 11.5, p.Faint, "Per fissare una chat in alto: tasto destro sulla chat › Fissa in alto (al massimo 3, come su WhatsApp).").Layout)
 		}),
+		section("MESSAGGI"),
+		toggleRow(&o.showDel, "Mostra i messaggi eliminati", "Se qualcuno elimina un messaggio, qui resta visibile con l'etichetta Eliminato", u.Settings().ShowDeleted),
 		section("AVVISI"),
 		toggleRow(&o.sound, "Suono per i nuovi messaggi", "", u.settings.Sound),
+		toggleRow(&o.updates, "Avvisami delle nuove versioni", "Versione installata: "+Version, u.Settings().CheckUpdates),
 		toggleRow(&o.notify, notifyLabel, "Quando Ping non è in primo piano", u.settings.Notify),
 		section("GIF E STICKER ONLINE"),
 		layout.Rigid(func(gtx C) D {

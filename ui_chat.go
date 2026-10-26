@@ -54,6 +54,7 @@ type chatWin struct {
 	profiles    []*profileView // schede aperte (l'ultima è quella visibile)
 	wantProfile bool           // chiesta da un'altra finestra (protetta da noticeMu)
 	gioPaste    bool           // incollare il testo con il meccanismo di Gio
+	showDel     bool           // con che impostazione sono stati caricati i messaggi eliminati
 
 	list      widget.List
 	editor    widget.Editor
@@ -159,11 +160,18 @@ func (cw *chatWin) run() {
 
 func (cw *chatWin) reload() {
 	v := cw.u.be.ChatVersion(cw.jid)
-	if cw.loaded && v == cw.ver {
+	if cw.loaded && v == cw.ver && cw.showDel == cw.set.ShowDeleted {
 		return
 	}
-	cw.ver, cw.loaded = v, true
+	cw.ver, cw.loaded, cw.showDel = v, true, cw.set.ShowDeleted
 	cw.msgs = cw.u.be.db.Messages(cw.jid, 400)
+	for i := range cw.msgs {
+		if m := &cw.msgs[i]; m.Deleted && !cw.showDel {
+			// opzione spenta: come su WhatsApp, del messaggio resta solo l'avviso
+			m.Kind, m.Text, m.Thumb, m.Media, m.Deleted = KDeleted, "", nil, nil, false
+			m.Extra = MsgExtra{}
+		}
+	}
 	cw.rows = cw.rows[:0]
 	lastDay, lastSender := "", ""
 	for i := range cw.msgs {

@@ -29,17 +29,20 @@ import (
 )
 
 type Settings struct {
-	ShowPhotos bool     `json:"show_photos"`
-	Sound      bool     `json:"sound"`
-	Notify     bool     `json:"notify"`
-	Theme      string   `json:"theme"` // "auto", "light" o "dark"
-	Recent     []string `json:"recent_emoji"`
-	ChatPhotos bool     `json:"chat_photos"` // foto del mittente accanto ai messaggi
-	KlipyKey   string   `json:"klipy_key"`
-	CustomerID string   `json:"customer_id"`
-	Single     bool     `json:"single_window"` // chat e lista nella stessa finestra
-	ChatLeft   bool     `json:"chat_left"`     // finestra unica: chat a sinistra della lista
-	UnreadTop  bool     `json:"unread_first"`  // chat non lette in cima (sotto quelle fissate)
+	ShowPhotos   bool     `json:"show_photos"`
+	Sound        bool     `json:"sound"`
+	Notify       bool     `json:"notify"`
+	Theme        string   `json:"theme"` // "auto", "light" o "dark"
+	Recent       []string `json:"recent_emoji"`
+	ChatPhotos   bool     `json:"chat_photos"` // foto del mittente accanto ai messaggi
+	KlipyKey     string   `json:"klipy_key"`
+	CustomerID   string   `json:"customer_id"`
+	Single       bool     `json:"single_window"` // chat e lista nella stessa finestra
+	ChatLeft     bool     `json:"chat_left"`     // finestra unica: chat a sinistra della lista
+	UnreadTop    bool     `json:"unread_first"`  // chat non lette in cima (sotto quelle fissate)
+	ShowDeleted  bool     `json:"show_deleted"`  // mostra i messaggi eliminati da chi li ha scritti
+	CheckUpdates bool     `json:"check_updates"` // avvisa quando c'è una nuova versione
+	SkipVersion  string   `json:"skip_version"`  // versione di cui l'utente ha chiuso l'avviso
 
 	Places map[string]WinPlace `json:"places,omitempty"` // posizione delle finestre (letta solo con place/savePlace)
 }
@@ -117,7 +120,7 @@ type UI struct {
 
 func NewUI(be *Backend, dir string) *UI {
 	u := &UI{be: be, dir: dir, chats: map[string]*chatWin{}}
-	u.settings = Settings{ShowPhotos: true, Sound: true, Notify: true, Theme: "auto"}
+	u.settings = Settings{ShowPhotos: true, Sound: true, Notify: true, Theme: "auto", CheckUpdates: true}
 	if b, err := os.ReadFile(filepath.Join(dir, "settings.json")); err == nil {
 		json.Unmarshal(b, &u.settings)
 	}
@@ -369,6 +372,8 @@ type mainWin struct {
 	menuPin     widget.Clickable
 	menuRead    widget.Clickable
 	menuOpen    widget.Clickable
+	updOpen     widget.Clickable // avviso di nuova versione
+	updClose    widget.Clickable
 	tabChats    widget.Clickable
 	tabBook     widget.Clickable
 	tab         int
@@ -404,6 +409,7 @@ func (u *UI) RunMain() {
 	m.search.SingleLine = true
 	m.list.Axis = layout.Vertical
 	u.main = m
+	u.startUpdateChecks()
 	go func() {
 		for range time.Tick(5 * time.Second) {
 			u.invalidateAll()
@@ -578,6 +584,7 @@ func (m *mainWin) sidebar(gtx C, st ConnState) D {
 		layout.Rigid(m.header),
 		layout.Rigid(m.searchBar),
 		layout.Rigid(m.tabs),
+		layout.Rigid(m.updateBanner),
 		layout.Flexed(1, m.contactList),
 		layout.Rigid(func(gtx C) D { return m.statusBar(gtx, st) }),
 	)
@@ -1062,6 +1069,41 @@ func sortChatRows(out []rowItem, unreadTop bool) {
 			return a.Unread > 0
 		}
 		return false
+	})
+}
+
+// updateBanner: avviso di una nuova versione su GitHub.
+func (m *mainWin) updateBanner(gtx C) D {
+	th, p, u := m.th, m.pal, m.u
+	upd := AvailableUpdate()
+	if upd == nil || u.Settings().SkipVersion == upd.Tag || !u.Settings().CheckUpdates {
+		return D{}
+	}
+	if m.updClose.Clicked(gtx) {
+		tag := upd.Tag
+		u.Update(func(s *Settings) { s.SkipVersion = tag })
+		gtx.Execute(op.InvalidateCmd{})
+		return D{}
+	}
+	if m.updOpen.Clicked(gtx) {
+		go openPath(upd.URL)
+	}
+	return layout.Inset{Left: 10, Right: 10, Top: 8, Bottom: 2}.Layout(gtx, func(gtx C) D {
+		return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+			layout.Flexed(1, func(gtx C) D {
+				return m.updOpen.Layout(gtx, func(gtx C) D {
+					pointer.CursorPointer.Add(gtx.Ops)
+					return rounded(gtx, p.Mine, 10, 12, 8, func(gtx C) D {
+						gtx.Constraints.Min.X = gtx.Constraints.Max.X
+						return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+							layout.Rigid(one(bold(lbl(th, 12.5, p.Text, "È disponibile Ping "+upd.Tag))).Layout),
+							layout.Rigid(one(lbl(th, 11.5, p.Accent, "Clicca per scaricarla da GitHub")).Layout),
+						)
+					})
+				})
+			}),
+			layout.Rigid(func(gtx C) D { return iconButton(gtx, th, p, &m.updClose, "\uE711", false, p.Muted) }),
+		)
 	})
 }
 

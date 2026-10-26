@@ -34,6 +34,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # servono i tag per sapere la versione
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -44,8 +46,10 @@ jobs:
           GOOS: windows
           CGO_ENABLED: "0"
         run: |
-          GOARCH=amd64 go build -trimpath -ldflags "-s -w -H windowsgui" -o dist/Ping.exe .
-          GOARCH=arm64 go build -trimpath -ldflags "-s -w -H windowsgui" -o dist/Ping-arm64.exe .
+          V=$(git describe --tags --always)
+          echo "Versione: $V"
+          GOARCH=amd64 go build -trimpath -ldflags "-s -w -H windowsgui -X main.Version=$V" -o dist/Ping.exe .
+          GOARCH=arm64 go build -trimpath -ldflags "-s -w -H windowsgui -X main.Version=$V" -o dist/Ping-arm64.exe .
           ls -la dist
       - uses: actions/upload-artifact@v4
         with:
@@ -58,6 +62,8 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # servono i tag per sapere la versione
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -73,7 +79,9 @@ jobs:
       - name: Compila e prepara il pacchetto
         run: |
           mkdir -p dist pkg/ping-whatsapp
-          go build -trimpath -ldflags "-s -w" -o pkg/ping-whatsapp/ping-whatsapp .
+          V=$(git describe --tags --always)
+          echo "Versione: $V"
+          go build -trimpath -ldflags "-s -w -X main.Version=$V" -o pkg/ping-whatsapp/ping-whatsapp .
           cp packaging/linux/install.sh packaging/linux/ping-whatsapp.desktop pkg/ping-whatsapp/
           cp winres/icon256.png pkg/ping-whatsapp/ping-whatsapp.png
           cp LICENSE pkg/ping-whatsapp/

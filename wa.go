@@ -561,7 +561,12 @@ func (b *Backend) onMessage(e *events.Message, live bool) {
 		target := pm.GetKey().GetID()
 		switch pm.GetType() {
 		case waE2E.ProtocolMessage_REVOKE:
-			b.db.UpdateText(chatID, target, "", KDeleted)
+			if info.IsFromMe {
+				b.db.UpdateText(chatID, target, "", KDeleted) // eliminato da me (dal telefono): sparisce davvero
+			} else {
+				// eliminato da altri: il contenuto si tiene, e si mostra solo se l'opzione è attiva
+				b.db.MarkRevoked(chatID, target)
+			}
 			b.changed(chatID)
 		case waE2E.ProtocolMessage_MESSAGE_EDIT:
 			if t := parseContent(pm.GetEditedMessage()).Text; t != "" {

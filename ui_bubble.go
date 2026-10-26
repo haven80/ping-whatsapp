@@ -64,7 +64,7 @@ func (cw *chatWin) bubbleRow(gtx C, r chatRow) D {
 	if r.first {
 		top = 7
 	}
-	canAct := m.Kind != KDeleted && !strings.HasPrefix(m.ID, "call-")
+	canAct := m.Kind != KDeleted && !m.Deleted && !strings.HasPrefix(m.ID, "call-")
 	tag := cw.rowTag(m.ID)
 	for {
 		ev, ok := gtx.Event(pointer.Filter{Target: tag, Kinds: pointer.Press})
@@ -495,6 +495,18 @@ func (cw *chatWin) bubble(gtx C, m *Message, first bool) D {
 	add := func(w layout.Widget) { parts = append(parts, layout.Rigid(w)) }
 	gap := func(h unit.Dp) { add(layout.Spacer{Height: h}.Layout) }
 
+	if m.Deleted { // eliminato da chi l'ha scritto, mostrato perché l'opzione è attiva
+		add(func(gtx C) D {
+			l := bold(lbl(th, 11, p.Danger, "Eliminato da chi l'ha scritto"))
+			l.Font.Style = font.Italic
+			return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+				layout.Rigid(icon(th, 10, p.Danger, "\uE74D").Layout),
+				layout.Rigid(layout.Spacer{Width: 4}.Layout),
+				layout.Rigid(l.Layout),
+			)
+		})
+		gap(3)
+	}
 	if m.Extra.Forwarded {
 		add(func(gtx C) D {
 			l := lbl(th, 11, p.Faint, "Inoltrato")
