@@ -40,6 +40,7 @@ type Settings struct {
 	Single       bool     `json:"single_window"` // chat e lista nella stessa finestra
 	ChatLeft     bool     `json:"chat_left"`     // finestra unica: chat a sinistra della lista
 	UnreadTop    bool     `json:"unread_first"`  // chat non lette in cima (sotto quelle fissate)
+	Color        string   `json:"color"`         // tema di colore (vedi themes.go)
 	ShowDeleted  bool     `json:"show_deleted"`  // mostra i messaggi eliminati da chi li ha scritti
 	CheckUpdates bool     `json:"check_updates"` // avvisa quando c'è una nuova versione
 	SkipVersion  string   `json:"skip_version"`  // versione di cui l'utente ha chiuso l'avviso
@@ -834,7 +835,7 @@ func (m *mainWin) searchBar(gtx C) D {
 					e.TextSize = unit.Sp(13)
 					e.Color = p.Text
 					e.HintColor = p.Faint
-					e.SelectionColor = argb(0x1F9D7A, 0x55)
+					e.SelectionColor = selColor(p)
 					return e.Layout(gtx)
 				}),
 			)

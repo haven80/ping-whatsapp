@@ -719,7 +719,7 @@ func (cw *chatWin) composer(gtx C) D {
 					e.TextSize = unit.Sp(13.5)
 					e.Color = p.Text
 					e.HintColor = p.Faint
-					e.SelectionColor = argb(0x1F9D7A, 0x55)
+					e.SelectionColor = selColor(p)
 					return e.Layout(gtx)
 				})
 			}),

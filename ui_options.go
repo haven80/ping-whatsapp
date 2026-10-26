@@ -11,6 +11,7 @@ import (
 	"gioui.org/io/pointer"
 	"gioui.org/layout"
 	"gioui.org/op"
+	"gioui.org/unit"
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 )
@@ -32,6 +33,7 @@ type optionsState struct {
 	winSep     widget.Clickable
 	winOne     widget.Clickable
 	unreadTop  widget.Clickable
+	colorBtns  map[string]*widget.Clickable
 	showDel    widget.Clickable
 	updates    widget.Clickable
 	chatRight  widget.Clickable
@@ -42,10 +44,11 @@ type optionsState struct {
 func (u *UI) applyTheme() {
 	u.setMu.Lock()
 	dark := u.settings.Theme == "dark" || (u.settings.Theme != "light" && SystemDarkMode())
+	sc := schemeByID(u.settings.Color)
 	if dark {
-		u.pal = darkPal
+		u.pal = sc.Dark
 	} else {
-		u.pal = lightPal
+		u.pal = sc.Light
 	}
 	u.setMu.Unlock()
 	var hwnds []uintptr
@@ -144,6 +147,20 @@ func (m *mainWin) optionsView(gtx C) D {
 	if o.winOne.Clicked(gtx) {
 		m.setSingle(true)
 		gtx.Execute(op.InvalidateCmd{})
+	}
+	if o.colorBtns == nil {
+		o.colorBtns = map[string]*widget.Clickable{}
+		for _, sc := range colorSchemes {
+			o.colorBtns[sc.ID] = new(widget.Clickable)
+		}
+	}
+	for id, cl := range o.colorBtns {
+		if cl.Clicked(gtx) {
+			id := id
+			u.Update(func(s *Settings) { s.Color = id })
+			u.applyTheme()
+			gtx.Execute(op.InvalidateCmd{})
+		}
 	}
 	if o.showDel.Clicked(gtx) {
 		u.Update(func(s *Settings) { s.ShowDeleted = !s.ShowDeleted })
@@ -285,6 +302,10 @@ func (m *mainWin) optionsView(gtx C) D {
 				})
 			})
 		}),
+		layout.Rigid(layout.Spacer{Height: 12}.Layout),
+		layout.Rigid(func(gtx C) D {
+			return layout.Inset{Left: 18, Right: 18}.Layout(gtx, func(gtx C) D { return m.colorGrid(gtx) })
+		}),
 		section("FINESTRE"),
 		layout.Rigid(func(gtx C) D {
 			return layout.Inset{Left: 18, Right: 18}.Layout(gtx, func(gtx C) D {
@@ -418,3 +439,79 @@ var notifyLabel = func() string {
 	}
 	return "Notifiche del sistema"
 }()
+
+// colorGrid: i temi di colore, 5 per riga, con un'anteprima di sfondo, bolle e colore principale.
+func (m *mainWin) colorGrid(gtx C) D {
+	th, p, o := m.th, m.pal, &m.opt
+	cur := schemeByID(m.u.Settings().Color).ID
+	const perRow = 5
+	gap := dp(gtx, 8)
+	w := (gtx.Constraints.Max.X - gap*(perRow-1)) / perRow
+	h := dp(gtx, 42)
+	var rows []layout.FlexChild
+	for start := 0; start < len(colorSchemes); start += perRow {
+		end := min(start+perRow, len(colorSchemes))
+		var cells []layout.FlexChild
+		for i := start; i < end; i++ {
+			sc := colorSchemes[i]
+			sp := sc.Light
+			if p.Dark {
+				sp = sc.Dark
+			}
+			if i > start {
+				cells = append(cells, layout.Rigid(layout.Spacer{Width: unit.Dp(float32(gap) / gtx.Metric.PxPerDp)}.Layout))
+			}
+			cl, sel := o.colorBtns[sc.ID], sc.ID == cur
+			cells = append(cells, layout.Rigid(func(gtx C) D {
+				return cl.Layout(gtx, func(gtx C) D {
+					pointer.CursorPointer.Add(gtx.Ops)
+					gtx.Constraints = layout.Exact(image.Pt(w, gtx.Constraints.Max.Y))
+					gtx.Constraints.Min.Y = 0
+					return layout.Flex{Axis: layout.Vertical, Alignment: layout.Middle}.Layout(gtx,
+						layout.Rigid(func(gtx C) D {
+							r := image.Rect(0, 0, w, h)
+							rad := dp(gtx, 9)
+							if sel {
+								fillRRect(gtx, p.Accent, r, rad)
+								r = r.Inset(dp(gtx, 2))
+								fillRRect(gtx, p.Bg, r, rad-dp(gtx, 1))
+								r = r.Inset(dp(gtx, 1))
+							} else if cl.Hovered() {
+								fillRRect(gtx, p.Faint, r, rad)
+								r = r.Inset(dp(gtx, 1))
+							} else {
+								fillRRect(gtx, p.Divider, r, rad)
+								r = r.Inset(dp(gtx, 1))
+							}
+							fillRRect(gtx, sp.Bg, r, rad-dp(gtx, 2))
+							// bolla altrui, bolla mia, puntino del colore principale
+							bw, bh := r.Dx()*45/100, dp(gtx, 8)
+							fillRRect(gtx, sp.Surface, image.Rect(r.Min.X+dp(gtx, 5), r.Min.Y+dp(gtx, 6), r.Min.X+dp(gtx, 5)+bw, r.Min.Y+dp(gtx, 6)+bh), dp(gtx, 4))
+							fillRRect(gtx, sp.Mine, image.Rect(r.Max.X-dp(gtx, 5)-bw, r.Min.Y+dp(gtx, 17), r.Max.X-dp(gtx, 5), r.Min.Y+dp(gtx, 17)+bh), dp(gtx, 4))
+							d := dp(gtx, 9)
+							fillCircle(gtx, sp.Accent, image.Rect(r.Min.X+dp(gtx, 5), r.Max.Y-dp(gtx, 5)-d, r.Min.X+dp(gtx, 5)+d, r.Max.Y-dp(gtx, 5)))
+							return D{Size: image.Pt(w, h)}
+						}),
+						layout.Rigid(layout.Spacer{Height: 3}.Layout),
+						layout.Rigid(func(gtx C) D {
+							col := p.Muted
+							if sel {
+								col = p.Text
+							}
+							l := one(lbl(th, 10.5, col, sc.Name))
+							if sel {
+								l.Font.Weight = font.SemiBold
+							}
+							return l.Layout(gtx)
+						}),
+					)
+				})
+			}))
+		}
+		if start > 0 {
+			rows = append(rows, layout.Rigid(layout.Spacer{Height: 8}.Layout))
+		}
+		rows = append(rows, layout.Rigid(func(gtx C) D { return layout.Flex{}.Layout(gtx, cells...) }))
+	}
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, rows...)
+}

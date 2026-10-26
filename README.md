@@ -157,9 +157,12 @@ Facoltativi, di solito già presenti:
 Dall'ingranaggio in alto nella finestra principale:
 
 - **Tema:** Sistema, Chiaro o Scuro
+- **Colori:** 10 temi (Ping, Azzurro, Oceano, Viola, Arancio, Ciliegia, Grafite e i pastello Rosa, Cielo, Menta), ognuno in versione chiara e scura
+- **Finestre:** separate come su MSN, oppure una sola con lista e chat affiancate
 - **Foto profilo nella lista:** spente, la lista diventa compatta in stile ICQ
 - **Foto accanto ai messaggi:** mostra chi scrive, come su MSN
-- **Suoni e notifiche** di Windows
+- **Chat non lette in alto** e **messaggi eliminati visibili**
+- **Suoni, notifiche** e avviso delle nuove versioni
 - **Chiave KLIPY** per cercare GIF e sticker online
 - **Disconnetti questo PC**
 

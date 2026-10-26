@@ -395,7 +395,7 @@ func (cw *chatWin) reactionBar(gtx C, m *Message) D {
 					s := dp(gtx, 34)
 					r := image.Rectangle{Max: image.Pt(s, s)}
 					if sel {
-						fillCircle(gtx, argb(0x1F9D7A, 0x40), r)
+						fillCircle(gtx, withAlpha(p.Accent, 0x40), r)
 					} else if cl.Hovered() {
 						fillCircle(gtx, p.Hover, r)
 					}
@@ -601,7 +601,7 @@ func (cw *chatWin) bubble(gtx C, m *Message, first bool) D {
 			add(func(gtx C) D {
 				l := lbl(th, size, p.Text, text)
 				l.State = sel
-				l.SelectionColor = argb(0x1F9D7A, 0x55)
+				l.SelectionColor = selColor(p)
 				return l.Layout(gtx)
 			})
 		}
