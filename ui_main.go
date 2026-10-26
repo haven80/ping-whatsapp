@@ -41,6 +41,7 @@ type Settings struct {
 	ChatLeft     bool     `json:"chat_left"`     // finestra unica: chat a sinistra della lista
 	UnreadTop    bool     `json:"unread_first"`  // chat non lette in cima (sotto quelle fissate)
 	Color        string   `json:"color"`         // tema di colore (vedi themes.go)
+	EmojiSet     string   `json:"emoji_set"`     // stile delle emoji (vedi emoji.go)
 	ShowDeleted  bool     `json:"show_deleted"`  // mostra i messaggi eliminati da chi li ha scritti
 	CheckUpdates bool     `json:"check_updates"` // avvisa quando c'è una nuova versione
 	SkipVersion  string   `json:"skip_version"`  // versione di cui l'utente ha chiuso l'avviso
@@ -137,6 +138,9 @@ func NewUI(be *Backend, dir string) *UI {
 		u.setMu.Unlock()
 	}
 	u.applyTheme()
+	if id := u.settings.EmojiSet; id != "" && id != "google" {
+		u.loadEmojiSet(id) // dal disco; se manca lo riscarica in sottofondo
+	}
 
 	be.OnChange = u.invalidateAll
 	be.OnIncoming = u.incoming
@@ -375,6 +379,7 @@ type mainWin struct {
 	menuOpen    widget.Clickable
 	updOpen     widget.Clickable // avviso di nuova versione
 	updClose    widget.Clickable
+	emojiVer    int
 	tabChats    widget.Clickable
 	tabBook     widget.Clickable
 	tab         int
@@ -523,6 +528,7 @@ func (m *mainWin) run() {
 			gtx := app.NewContext(&ops, e)
 			m.pal = m.u.Pal()
 			applyPalette(m.th, m.pal)
+			refreshEmoji(m.th, &m.emojiVer)
 			guardFrame("principale", func() { m.layout(gtx) })
 			e.Frame(gtx.Ops)
 		default:

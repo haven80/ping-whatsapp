@@ -157,6 +157,7 @@ Facoltativi, di solito già presenti:
 Dall'ingranaggio in alto nella finestra principale:
 
 - **Tema:** Sistema, Chiaro o Scuro
+- **Emoji:** stile Google (incluso), Fluent 3D o piatte (Microsoft, come Windows 11) e Twemoji; quelli non inclusi si scaricano una volta, circa 10 MB
 - **Colori:** 10 temi (Ping, Azzurro, Oceano, Viola, Arancio, Ciliegia, Grafite e i pastello Rosa, Cielo, Menta), ognuno in versione chiara e scura
 - **Finestre:** separate come su MSN, oppure una sola con lista e chat affiancate
 - **Foto profilo nella lista:** spente, la lista diventa compatta in stile ICQ
@@ -277,6 +278,8 @@ Ping è software libero, distribuito con licenza **GNU GPL v3** (vedi [LICENSE](
 | [nativewebp](https://github.com/HugoSmits86/nativewebp), [go-qrcode](https://github.com/skip2/go-qrcode) | MIT |
 | [Noto Color Emoji](https://github.com/googlefonts/noto-emoji) | SIL Open Font License (vedi `fonts/`) |
 | [Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons) (icone su Linux) | MIT (vedi `fonts/`) |
+| [Fluent Emoji](https://github.com/microsoft/fluentui-emoji) (stile emoji facoltativo) | MIT |
+| [Twemoji](https://github.com/jdecked/twemoji) (stile emoji facoltativo), © Twitter e collaboratori | CC-BY 4.0 |
 | [systray](https://github.com/fyne-io/systray), [godbus](https://github.com/godbus/dbus) | Apache 2.0 / BSD |
 
 WhatsApp è un marchio di WhatsApp LLC. Ping è un progetto indipendente e non è collegato, approvato o sponsorizzato da WhatsApp o Meta.

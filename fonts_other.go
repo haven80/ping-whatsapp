@@ -17,7 +17,7 @@ var iconTTF []byte
 
 const (
 	iconFace = font.Typeface("Ping Icons")
-	textFace = font.Typeface("Inter,Noto Sans,Cantarell,Ubuntu,DejaVu Sans,Ping Emoji,sans-serif")
+	textFace = font.Typeface("Ping Emoji,Inter,Noto Sans,Cantarell,Ubuntu,DejaVu Sans,sans-serif") // emoji per primo: altrimenti ❤ e le faccine arrivano in bianco e nero dai font di testo
 )
 
 func platformFaces() []font.FontFace {

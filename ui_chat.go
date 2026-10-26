@@ -55,6 +55,7 @@ type chatWin struct {
 	wantProfile bool           // chiesta da un'altra finestra (protetta da noticeMu)
 	gioPaste    bool           // incollare il testo con il meccanismo di Gio
 	showDel     bool           // con che impostazione sono stati caricati i messaggi eliminati
+	emojiVer    int            // versione del font emoji usata dal motore del testo
 
 	list      widget.List
 	editor    widget.Editor
@@ -140,6 +141,7 @@ func (cw *chatWin) run() {
 			gtx := app.NewContext(&ops, e)
 			cw.pal, cw.set = cw.u.Pal(), cw.u.Settings()
 			applyPalette(cw.th, cw.pal)
+			refreshEmoji(cw.th, &cw.emojiVer)
 			guardFrame("chat", func() { cw.layout(gtx) })
 			e.Frame(gtx.Ops)
 		default:

@@ -92,12 +92,20 @@ const (
 //go:embed fonts/PingEmoji.ttf
 var emojiTTF []byte
 
-// newTheme usa i font di sistema per il testo e Noto Color Emoji (incorporato) per le emoji:
-// il font emoji di Windows è vettoriale a colori e Gio lo mostrerebbe in bianco e nero.
+// newTheme usa i font di sistema per il testo e un font emoji incorporato (o scaricato, vedi
+// emoji.go): il font emoji di Windows è vettoriale a colori e Gio lo mostrerebbe in bianco e nero.
 func newTheme() *material.Theme {
 	th := material.NewTheme()
+	th.Shaper, _ = newShaper()
+	th.Face = textFace
+	return th
+}
+
+// newShaper crea il motore del testo con il font emoji attuale; restituisce anche la sua versione.
+func newShaper() (*text.Shaper, int) {
+	data, ver := currentEmojiFont()
 	var faces []font.FontFace // un'unica raccolta: più WithCollection non si sommano
-	if em, err := opentype.ParseCollection(emojiTTF); err == nil {
+	if em, err := opentype.ParseCollection(data); err == nil {
 		for i := range em {
 			em[i].Font.Typeface = emojiFace
 		}
@@ -108,9 +116,14 @@ func newTheme() *material.Theme {
 	if len(faces) > 0 {
 		opts = append(opts, text.WithCollection(faces))
 	}
-	th.Shaper = text.NewShaper(opts...)
-	th.Face = textFace
-	return th
+	return text.NewShaper(opts...), ver
+}
+
+// refreshEmoji ricrea il motore del testo della finestra se nel frattempo è cambiato lo stile delle emoji.
+func refreshEmoji(th *material.Theme, ver *int) {
+	if v := emojiFontVersion(); v != *ver {
+		th.Shaper, *ver = newShaper()
+	}
 }
 
 func dp(gtx C, v float32) int { return gtx.Dp(unit.Dp(v)) }

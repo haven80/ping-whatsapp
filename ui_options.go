@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
+	"gioui.org/op/paint"
 	"image"
 	"image/color"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -34,6 +37,8 @@ type optionsState struct {
 	winOne     widget.Clickable
 	unreadTop  widget.Clickable
 	colorBtns  map[string]*widget.Clickable
+	emojiBtns  map[string]*widget.Clickable
+	emojiPrev  map[string]paint.ImageOp
 	showDel    widget.Clickable
 	updates    widget.Clickable
 	chatRight  widget.Clickable
@@ -159,6 +164,25 @@ func (m *mainWin) optionsView(gtx C) D {
 			id := id
 			u.Update(func(s *Settings) { s.Color = id })
 			u.applyTheme()
+			gtx.Execute(op.InvalidateCmd{})
+		}
+	}
+	if o.emojiBtns == nil {
+		o.emojiBtns, o.emojiPrev = map[string]*widget.Clickable{}, map[string]paint.ImageOp{}
+		for _, s := range emojiSets {
+			o.emojiBtns[s.ID] = new(widget.Clickable)
+			if img, _, err := image.Decode(bytes.NewReader(s.Preview)); err == nil {
+				op := paint.NewImageOp(img)
+				op.Filter = paint.FilterLinear
+				o.emojiPrev[s.ID] = op
+			}
+		}
+	}
+	for id, cl := range o.emojiBtns {
+		if cl.Clicked(gtx) {
+			id := id
+			u.Update(func(s *Settings) { s.EmojiSet = id })
+			u.loadEmojiSet(id)
 			gtx.Execute(op.InvalidateCmd{})
 		}
 	}
@@ -305,6 +329,10 @@ func (m *mainWin) optionsView(gtx C) D {
 		layout.Rigid(layout.Spacer{Height: 12}.Layout),
 		layout.Rigid(func(gtx C) D {
 			return layout.Inset{Left: 18, Right: 18}.Layout(gtx, func(gtx C) D { return m.colorGrid(gtx) })
+		}),
+		section("EMOJI"),
+		layout.Rigid(func(gtx C) D {
+			return layout.Inset{Left: 12, Right: 12}.Layout(gtx, func(gtx C) D { return m.emojiChooser(gtx) })
 		}),
 		section("FINESTRE"),
 		layout.Rigid(func(gtx C) D {
@@ -512,6 +540,87 @@ func (m *mainWin) colorGrid(gtx C) D {
 			rows = append(rows, layout.Rigid(layout.Spacer{Height: 8}.Layout))
 		}
 		rows = append(rows, layout.Rigid(func(gtx C) D { return layout.Flex{}.Layout(gtx, cells...) }))
+	}
+	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, rows...)
+}
+
+// emojiChooser: gli stili delle emoji, con anteprima; quelli non ancora sul PC si scaricano alla scelta.
+func (m *mainWin) emojiChooser(gtx C) D {
+	th, p, o, u := m.th, m.pal, &m.opt, m.u
+	cur := emojiSetByID(u.Settings().EmojiSet).ID
+	var rows []layout.FlexChild
+	for _, s := range emojiSets {
+		s := s
+		cl, sel := o.emojiBtns[s.ID], s.ID == cur
+		prog, busy, errText := EmojiDownload(s.ID)
+		ready := u.EmojiReady(s.ID)
+		rows = append(rows, layout.Rigid(func(gtx C) D {
+			return cl.Layout(gtx, func(gtx C) D {
+				pointer.CursorPointer.Add(gtx.Ops)
+				mc := op.Record(gtx.Ops)
+				d := layout.Inset{Left: 8, Right: 8, Top: 7, Bottom: 7}.Layout(gtx, func(gtx C) D {
+					gtx.Constraints.Min.X = gtx.Constraints.Max.X
+					return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+						layout.Rigid(func(gtx C) D {
+							return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+								layout.Flexed(1, func(gtx C) D {
+									l := one(lbl(th, 13, p.Text, s.Name))
+									if sel {
+										l.Font.Weight = font.SemiBold
+									}
+									return l.Layout(gtx)
+								}),
+								layout.Rigid(func(gtx C) D {
+									switch {
+									case busy:
+										return lbl(th, 11.5, p.Accent, "Download "+strconv.Itoa(int(prog*100))+"%").Layout(gtx)
+									case sel && ready:
+										return icon(th, 12, p.Accent, icCheck).Layout(gtx)
+									case !ready:
+										mb := float64(s.Size) / 1e6
+										return lbl(th, 11, p.Faint, "da scaricare · "+strconv.FormatFloat(mb, 'f', 0, 64)+" MB").Layout(gtx)
+									}
+									return D{}
+								}),
+							)
+						}),
+						layout.Rigid(layout.Spacer{Height: 5}.Layout),
+						layout.Rigid(func(gtx C) D {
+							pv, ok := o.emojiPrev[s.ID]
+							if !ok {
+								return D{}
+							}
+							sz := pv.Size()
+							h := dp(gtx, 22)
+							w := sz.X * h / max(1, sz.Y)
+							st := op.Affine(f32Scale(float32(h) / float32(sz.Y))).Push(gtx.Ops)
+							pv.Add(gtx.Ops)
+							paint.PaintOp{}.Add(gtx.Ops)
+							st.Pop()
+							return D{Size: image.Pt(w, h)}
+						}),
+						layout.Rigid(layout.Spacer{Height: 4}.Layout),
+						layout.Rigid(func(gtx C) D {
+							t := s.Desc + " · " + s.Credit
+							col := p.Faint
+							if errText != "" {
+								t, col = errText+" (clicca per riprovare)", p.Danger
+							}
+							return lbl(th, 11, col, t).Layout(gtx)
+						}),
+					)
+				})
+				call := mc.Stop()
+				switch {
+				case sel:
+					fillRRect(gtx, withAlpha(p.Accent, 0x22), image.Rectangle{Max: d.Size}, dp(gtx, 10))
+				case cl.Hovered():
+					fillRRect(gtx, p.Hover, image.Rectangle{Max: d.Size}, dp(gtx, 10))
+				}
+				call.Add(gtx.Ops)
+				return d
+			})
+		}))
 	}
 	return layout.Flex{Axis: layout.Vertical}.Layout(gtx, rows...)
 }
