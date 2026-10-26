@@ -40,7 +40,13 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Icona e informazioni sul file (risorse Windows)
-        run: go run github.com/tc-hib/go-winres@latest make --arch amd64,arm64
+        run: |
+          # numero di versione nelle proprietà del file (es. tag v1.4.0 -> 1.4.0.0)
+          N=$(git describe --tags --abbrev=0 | sed 's/^v//; s/-.*//')
+          case "$N" in *.*.*) ;; *.*) N="$N.0" ;; *) N="0.0.0" ;; esac
+          sed -i "s/1\.0\.0\.0/$N.0/g; s/\"1\.0\.0\"/\"$N\"/g" winres/winres.json
+          grep -n "version\|Version" winres/winres.json
+          go run github.com/tc-hib/go-winres@latest make --arch amd64,arm64
       - name: Compila Ping.exe (x64 e ARM64)
         env:
           GOOS: windows
