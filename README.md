@@ -54,7 +54,7 @@ Preferisci tutto insieme? In **Opzioni › Finestre** scegli **Unica**: lista e 
 ### 💬 Messaggi
 - Testo, emoji a colori e le vecchie emoticon `:)` `;)` `<3` `(y)`
 - **Rispondi** citando un messaggio
-- **Reazioni** rapide o con qualsiasi emoji
+- **Reazioni** rapide o con qualsiasi emoji; passandoci sopra vedi chi le ha messe
 - **Modifica** ed **elimina** (per tutti o solo per te)
 - **Inoltra** fino a 5 chat in un colpo
 - **Sondaggi:** creali dalla graffetta, vota con un clic, guarda chi ha votato cosa

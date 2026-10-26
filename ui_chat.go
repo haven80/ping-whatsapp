@@ -61,6 +61,7 @@ type chatWin struct {
 	attFile     widget.Clickable
 	attPoll     widget.Clickable
 	pollNew     *pollDraft // sondaggio in preparazione
+	rxOpen      string     // messaggio con l'elenco delle reazioni aperto (clic)
 
 	list      widget.List
 	editor    widget.Editor

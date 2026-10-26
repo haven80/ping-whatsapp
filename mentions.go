@@ -245,3 +245,30 @@ func mentionWire(text string, names map[string]string) (string, []string) {
 	}
 	return wire, mentioned
 }
+
+// NameOf: il nome da mostrare per chi ha scritto o reagito in una chat ("me" = Tu).
+func (b *Backend) NameOf(sender, chat string) string {
+	if sender == "me" || sender == "" {
+		return "Tu"
+	}
+	if me, _ := b.Me(); sender == me {
+		return "Tu"
+	}
+	if sender == chat {
+		if c, ok := b.ChatByJID(chat); ok && c.Name != "" {
+			return c.Name
+		}
+	}
+	if strings.HasSuffix(chat, "@g.us") {
+		for _, m := range b.GroupMembers(chat) {
+			if m.JID == sender {
+				return m.Name
+			}
+		}
+	}
+	j, err := types.ParseJID(sender)
+	if err != nil {
+		return sender
+	}
+	return b.displayName(b.norm(j))
+}

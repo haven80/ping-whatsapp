@@ -141,7 +141,8 @@ func fillDemo(b *Backend, u *UI) {
 		{jid: "120363000000001@g.us", name: "Calcetto del giovedì", group: true, unread: 5, msgs: []Message{
 			{Text: "Chi c'è giovedì?", Sender: "393401111222@s.whatsapp.net", SenderName: "Marco", Time: ago(3 * time.Hour)},
 			{Text: "Io sì 💪", Sender: "393402333444@s.whatsapp.net", SenderName: "Luca B.", Time: ago(170 * time.Minute)},
-			{Text: "Presente", FromMe: true, Time: ago(160 * time.Minute), Status: StDelivered},
+			{Text: "Presente", FromMe: true, Time: ago(160 * time.Minute), Status: StDelivered,
+				Reactions: []Reaction{{Sender: "393401111222@s.whatsapp.net", Emoji: "👍"}, {Sender: "393402333444@s.whatsapp.net", Emoji: "❤️"}, {Sender: "393405555666@s.whatsapp.net", Emoji: "❤️"}}},
 			{Kind: KPoll, Sender: "393401111222@s.whatsapp.net", SenderName: "Marco", Time: ago(50 * time.Minute),
 				Extra: MsgExtra{Title: "Cena di fine stagione: che giorno?", Options: []string{"Venerdì 18", "Sabato 19", "Domenica 20"}, Max: 1},
 				Votes: []PollVote{{Voter: "393401111222@s.whatsapp.net", Name: "Marco", Options: []string{"Sabato 19"}},
@@ -181,7 +182,7 @@ func fillDemo(b *Backend, u *UI) {
 		{Kind: KImage, Text: "Sperlonga 🌅", Thumb: photoThumb, MediaPath: photo, Time: ago(94 * time.Minute)},
 		{Text: "Stupendo 😍", FromMe: true, Time: ago(90 * time.Minute), Status: StRead,
 			QuoteSender: "Chiara Neri", QuoteText: "📷 Sperlonga 🌅",
-			Reactions: []Reaction{{Sender: "x", Emoji: "❤️"}}},
+			Reactions: []Reaction{{Sender: "393409876543@s.whatsapp.net", Emoji: "❤️"}}},
 		{Kind: KSticker, MediaPath: sticker, Time: ago(88 * time.Minute)},
 		{Text: "😂😂😂", FromMe: true, Time: ago(80 * time.Minute), Status: StRead},
 		{Kind: KVideo, Thumb: photoThumb, Time: ago(70 * time.Minute), Extra: MsgExtra{Seconds: 37, W: 1280, H: 720}},

@@ -708,11 +708,76 @@ func (cw *chatWin) withReactions(gtx C, m *Message, w layout.Widget) D {
 	}
 	st = op.Offset(image.Pt(px, db.Size.Y-overlap)).Push(gtx.Ops)
 	r := image.Rectangle{Max: dpill.Size}
-	fillRRect(gtx, p.Bg, r.Inset(-dp(gtx, 2)), dpill.Size.Y/2+dp(gtx, 2))
-	fillRRect(gtx, p.Surface, r, dpill.Size.Y/2)
-	pill.Add(gtx.Ops)
+	// passando sopra (o cliccando) le reazioni compare chi le ha messe
+	id := m.ID
+	cl := cw.click("rx:"+id, func() {
+		if cw.rxOpen == id {
+			cw.rxOpen = ""
+		} else {
+			cw.rxOpen = id
+		}
+	})
+	gp := gtx
+	gp.Constraints = layout.Exact(dpill.Size)
+	cl.Layout(gp, func(gtx C) D {
+		pointer.CursorPointer.Add(gtx.Ops)
+		bg := p.Surface
+		if cl.Hovered() {
+			bg = p.Hover
+		}
+		fillRRect(gtx, p.Bg, r.Inset(-dp(gtx, 2)), dpill.Size.Y/2+dp(gtx, 2))
+		fillRRect(gtx, bg, r, dpill.Size.Y/2)
+		pill.Add(gtx.Ops)
+		return D{Size: dpill.Size}
+	})
+	if cl.Hovered() || cw.rxOpen == id {
+		cw.reactionPopup(gtx, m, dpill.Size, m.FromMe)
+	}
 	st.Pop()
 	return D{Size: total}
+}
+
+// reactionPopup: riquadro con chi ha reagito e come, disegnato sopra tutto il resto
+// (sopra le reazioni, così non esce dalla finestra in fondo alla chat).
+func (cw *chatWin) reactionPopup(gtx C, m *Message, pill image.Point, alignRight bool) {
+	th, p, be := cw.th, cw.pal, cw.u.be
+	mc := op.Record(gtx.Ops)
+	g := gtx
+	g.Constraints.Min = image.Point{}
+	g.Constraints.Max.X = dp(gtx, 260)
+	d := layout.UniformInset(10).Layout(g, func(gtx C) D {
+		var rows []layout.FlexChild
+		for i, r := range m.Reactions {
+			r := r
+			if i > 0 {
+				rows = append(rows, layout.Rigid(layout.Spacer{Height: 5}.Layout))
+			}
+			name := be.NameOf(r.Sender, m.Chat)
+			rows = append(rows, layout.Rigid(func(gtx C) D {
+				return layout.Flex{Alignment: layout.Middle}.Layout(gtx,
+					layout.Rigid(lbl(th, 15, p.Text, r.Emoji).Layout),
+					layout.Rigid(layout.Spacer{Width: 8}.Layout),
+					layout.Rigid(one(lbl(th, 12.5, p.Text, name)).Layout),
+				)
+			}))
+		}
+		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, rows...)
+	})
+	call := mc.Stop()
+	x := 0
+	if alignRight {
+		x = pill.X - d.Size.X
+	}
+	pos := image.Pt(x, -d.Size.Y-dp(gtx, 4))
+	mo := op.Record(gtx.Ops)
+	st := op.Offset(pos).Push(gtx.Ops)
+	rr := image.Rectangle{Max: d.Size}
+	fillRRect(gtx, withAlpha(rgb(0x000000), 0x22), rr.Add(image.Pt(0, dp(gtx, 2))).Inset(-dp(gtx, 1)), dp(gtx, 10))
+	fillRRect(gtx, p.Divider, rr.Inset(-dp(gtx, 1)), dp(gtx, 10))
+	fillRRect(gtx, p.Surface, rr, dp(gtx, 9))
+	call.Add(gtx.Ops)
+	st.Pop()
+	op.Defer(gtx.Ops, mo.Stop())
 }
 
 func itoa(n int) string {
